@@ -1,7 +1,5 @@
-#include <stdio.h>
 #include "data_base.h"
 
-#define __deviceID "1ea2d31ab21d"
 #define data_base_path "server/data.json"
 
 void qs(int *s_arr, int first, int last)
@@ -47,7 +45,7 @@ int load_database(const char *file_path, json_t *object) //doesn't work
     }
 }
 
-int create(json_t *data_array, const char *message, const char *deviceID, int messageID)
+int _create(json_t *data_array, const char *message, const char *deviceID, int messageID)
 {
     json_error_t error;
     json_t *object = json_loads(message, 0, &error);
@@ -59,17 +57,23 @@ int create(json_t *data_array, const char *message, const char *deviceID, int me
 
     time_t curTime = time(NULL);
     char *time = ctime(&curTime);
-    json_object_set_new(object, "time", json_stringn(time, strlen(time) - 1));
+    if (json_object_set_new(object, "time", json_stringn(time, strlen(time) - 1)) == -1)
+        return -1;
 
-    json_object_set_new(object, "messageID", json_integer(messageID));
+    if (json_object_set_new(object, "messageID", json_integer(messageID)) == -1)
+        return -1;
 
-    json_object_set_new(object, "deviceID", json_string(__deviceID));
+    if (json_object_set_new(object, "deviceID", json_string(deviceID)))
+        return -1;
 
     return json_array_append(data_array, object);
 }
 
-int update(json_t *data_array, const char *message, int messageID)
+int _update(json_t *data_array, const char *message, int messageID)
 {
+    if (!json_is_array(data_array))
+        return -1;
+
     json_error_t error;
     json_t *object = json_loads(message, 0, &error);
 
@@ -87,7 +91,7 @@ int update(json_t *data_array, const char *message, int messageID)
 int _delete(json_t *data_array, int *NmessageIDs)
 {
     int n = *NmessageIDs;
-    if (n < 1 || n > json_array_size(data_array))
+    if (n < 1)
         return -1;
 
     if (!json_is_array(data_array))
@@ -125,22 +129,23 @@ int _delete(json_t *data_array, int *NmessageIDs)
     }
 }
 
-char *read(json_t *data_array, int *NmessageIDs) // NmessageIDs - указатель на массив, где первый элемент -
+char *_read(json_t *data_array, int *NmessageIDs) // NmessageIDs - указатель на массив, где первый элемент -
 {                                                // количество следующих за ним элеменетов (id сообщений)
     if (*NmessageIDs == 0)                       // Если количество id == 0, возвращаем все записи базы
         return json_dumps(data_array, 0);
 
-    if (!json_is_array(data_array))             // Если json_t* - не на массив, возвращаем NULL
+    if (!json_is_array(data_array))             // Если json_t* - указатель не на массив, возвращаем NULL
         return NULL;
 
     json_t *res_object = json_array();
 
     int n = *NmessageIDs;
+    qs(NmessageIDs + 1, 0, n - 1); //quick sort
 
     int *start = NmessageIDs + 1, *oldStart = start;
     size_t index;
     json_t *value;
-    json_array_foreach(data_array, index, value)      
+    json_array_foreach(data_array, index, value)     
     {
         json_t *messageID = json_object_get(value, "messageID");
         if (!messageID)
