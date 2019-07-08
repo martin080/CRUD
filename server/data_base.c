@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include "data_base.h"
 
-#define __deviceID "1ea2d31ab21d"
 #define data_base_path "server/data.json"
 
 void qs(int *s_arr, int first, int last)
