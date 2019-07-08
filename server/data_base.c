@@ -46,7 +46,7 @@ int load_database(const char *file_path, json_t *object) //doesn't work
     }
 }
 
-int create(json_t *data_array, const char *message, const char *deviceID, int messageID)
+int _create(json_t *data_array, const char *message, const char *deviceID, int messageID)
 {
     json_error_t error;
     json_t *object = json_loads(message, 0, &error);
@@ -67,7 +67,7 @@ int create(json_t *data_array, const char *message, const char *deviceID, int me
     return json_array_append(data_array, object);
 }
 
-int update(json_t *data_array, const char *message, int messageID)
+int _update(json_t *data_array, const char *message, int messageID)
 {
     json_error_t error;
     json_t *object = json_loads(message, 0, &error);
@@ -124,7 +124,7 @@ int _delete(json_t *data_array, int *NmessageIDs)
     }
 }
 
-char *read(json_t *data_array, int *NmessageIDs) // NmessageIDs - указатель на массив, где первый элемент -
+char *_read(json_t *data_array, int *NmessageIDs) // NmessageIDs - указатель на массив, где первый элемент -
 {                                                // количество следующих за ним элеменетов (id сообщений)
     if (*NmessageIDs == 0)                       // Если количество id == 0, возвращаем все записи базы
         return json_dumps(data_array, 0);
