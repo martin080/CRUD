@@ -172,4 +172,3 @@ char *_read(json_t *data_array, int *NmessageIDs) // NmessageIDs - указат�
     return json_dumps(res_object, JSON_COMPACT);
 }
 
-
