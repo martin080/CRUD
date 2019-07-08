@@ -63,7 +63,7 @@ int _create(json_t *data_array, const char *message, const char *deviceID, int m
     if (json_object_set_new(object, "messageID", json_integer(messageID)) == -1)
         return -1;
 
-    if (json_object_set_new(object, "deviceID", json_string(deviceID)))
+    if (json_object_set_new(object, "deviceID", json_string(deviceID)) == -1)
         return -1;
 
     return json_array_append(data_array, object);
