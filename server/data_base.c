@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include "data_base.h"
 
 #define data_base_path "server/data.json"
