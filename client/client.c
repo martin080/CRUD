@@ -6,13 +6,13 @@
 #include <string.h>
 
 #include <stdio.h>
-#include "commands_file_parse.h"
+#include "commands_file_parse.c"
 
 int main(int argc, char *argv[])
 {
     if (argc != 2)
     {
-        fprintf(stderr, "usage: client COMMAND_FILE\n");
+        fprintf(stderr, "usage: ./client COMMAND_FILE\n");
         return 1;
     }
 
@@ -54,8 +54,19 @@ int main(int argc, char *argv[])
 
     if (connect(sockfd, res->ai_addr, res->ai_addrlen) == -1)
     {
-        fprintf(stderr, "connect: failed");
+        fprintf(stderr, "connection: failed");
         return 6;
+    }
+
+    int n = json_array_size(commands);
+    send(sockfd, &n, sizeof(n), 0);
+
+    json_t *value; size_t index;
+    json_array_foreach(commands, index, value)
+    {
+        char *json_in_text = json_dumps(value, JSON_COMPACT);
+        send(sockfd, json_in_text, strlen(json_in_text), 0);
+        free(json_in_text);
     }
 
     freeaddrinfo(res);

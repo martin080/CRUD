@@ -1,4 +1,4 @@
 all: server 
 
 server:
-	gcc -o server server.c -ljannson
+	gcc -o server server.c -ljansson
