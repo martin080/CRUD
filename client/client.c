@@ -69,5 +69,12 @@ int main(int argc, char *argv[])
         free(json_in_text);
     }
 
+    static char buffer[1024]; int size;
+    while ((size = recv(sockfd, buffer, sizeof(buffer), MSG_NOSIGNAL)))
+    {
+        buffer[size++] = '\0';
+        printf("%s\n", buffer);
+    }
+
     freeaddrinfo(res);
 }

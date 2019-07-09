@@ -117,15 +117,40 @@ int main()
 
                 json_t *command = json_object_get(object, "command");
                 const char *command_text = json_string_value(command);
-
+                json_t *params = json_object_get(object, "params");
                 if (!strcmp(command_text, "create"))
                 {
-                    json_t *params = json_object_get(object, "params");
-                    if (_create(database, params, ID++) == -1)
+                    if ( _create(database, params, ID) == -1)
                         send(new_fd, "error", sizeof("error"), 0);
                     else
                     {
+                        char respond[128];
+                        snprintf(respond, 128, "messageID is %d", ID++);
+                        send(new_fd, respond, strlen(respond), 0);
                         json_dump_file(database, BASE_PATH, 0);
+                    }
+                }
+                else if (!strcmp(command_text, "read"))
+                {
+                    json_t *msgIDs = json_object_get(params, "messageID");
+                    if (json_is_integer(msgIDs))
+                    {
+                        char *text = _read(database, json_integer_value(msgIDs));
+                        send(new_fd, text, strlen(text), 0);
+                        continue;
+                    }
+                    else if (json_is_array(msgIDs))
+                    {
+                        json_t *value;
+                        size_t index;
+                        json_array_foreach(msgIDs, index, value)
+                        {
+                            if (!json_is_integer(value))
+                                continue;
+                            char *text = _read(database, json_integer_value(value));
+                            send(new_fd, text, strlen(text), 0);
+                            free(text);
+                        }
                     }
                 }
             }
@@ -133,5 +158,6 @@ int main()
         shutdown(new_fd, SHUT_RDWR);
     }
 
+    json_decref(database);
     return 0;
 }

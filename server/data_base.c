@@ -1,6 +1,6 @@
 #include "data_base.h"
 
-#define data_base_path "server/data.json"
+#define data_base_path "data.json"
 
 int load_database(const char *file_path, json_t *object) //doesn't work
 {
