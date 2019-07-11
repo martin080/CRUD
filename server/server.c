@@ -8,7 +8,9 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "data_base.c"
+#include <errno.h>
+
+#include "data_base.h"
 
 #define PORT "3490"
 #define BASE_PATH "data.json"
@@ -26,6 +28,12 @@ int set_nonblock(int fd)
 
     } lags));
 #endif
+}
+
+int write_num(FILE *fp, int num)
+{
+    fseek(fp, SEEK_SET, 0);
+    return fprintf(fp, "%d", num);
 }
 
 int main()
@@ -56,14 +64,15 @@ int main()
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE;
 
-    int status;
-    if ((status = getaddrinfo(NULL, PORT, &hints, &res)) == -1)
+    int status = getaddrinfo(NULL, PORT, &hints, &res);
+    if (status == -1)
     {
         fprintf(stderr, "getaddrinfo failed: %s\n", gai_strerror(status));
         exit(0);
     };
 
-    if ((sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) == -1)
+    sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+    if (sockfd == -1)
     {
         fprintf(stderr, "socket failed.\n");
         exit(1);
@@ -106,6 +115,10 @@ int main()
             for (int i = 0; i < nCommand; i++)
             {
                 int size = recv(new_fd, buffer, sizeof(buffer), MSG_NOSIGNAL);
+                if (size == -1 && errno == EAGAIN)
+                {
+                    size = recv(new_fd, buffer, sizeof(buffer), 0);
+                }
                 buffer[size++] = '\0';
                 json_error_t error;
                 json_t *object = json_loads(buffer, 0, &error);
@@ -120,7 +133,7 @@ int main()
                 json_t *params = json_object_get(object, "params");
                 if (!strcmp(command_text, "create"))
                 {
-                    if ( _create(database, params, ID) == -1)
+                    if (create(database, params, ID) == -1)
                         send(new_fd, "error", sizeof("error"), 0);
                     else
                     {
@@ -128,6 +141,8 @@ int main()
                         snprintf(respond, 128, "messageID is %d", ID++);
                         send(new_fd, respond, strlen(respond), 0);
                         json_dump_file(database, BASE_PATH, 0);
+
+                        write_num(fp, ID);
                     }
                 }
                 else if (!strcmp(command_text, "read"))
@@ -135,7 +150,7 @@ int main()
                     json_t *msgIDs = json_object_get(params, "messageID");
                     if (json_is_integer(msgIDs))
                     {
-                        char *text = _read(database, json_integer_value(msgIDs));
+                        char *text = read(database, json_integer_value(msgIDs), NULL, 0);
                         send(new_fd, text, strlen(text), 0);
                         continue;
                     }
@@ -147,10 +162,19 @@ int main()
                         {
                             if (!json_is_integer(value))
                                 continue;
-                            char *text = _read(database, json_integer_value(value));
+                            char *text = read(database, json_integer_value(value), NULL, 0);
                             send(new_fd, text, strlen(text), 0);
                             free(text);
                         }
+                    }
+                }
+                else if (!strcmp(command_text, "update"))
+                {
+                    json_t *msgID = json_object_get(params, "messageID");
+                    if (!msgID)
+                    {
+                        send(new_fd, "error", sizeof("error"), 0);
+
                     }
                 }
             }

@@ -1,7 +1,5 @@
 #include "commands_file_parse.h"
 
-
-
 int check(json_t *commands, struct errors_t *errors)
 {
     if (!json_is_array(commands))
@@ -141,12 +139,12 @@ void printf_error(struct errors_t *errors)
     }
     else if (errors->is_not_object)
     {
-        fprintf(stderr, "command %d is not object", errors->command_index + 1);
+        fprintf(stderr, "command %d is not object\n", errors->command_index + 1);
         return;
     }
     else if (errors->command_is_not_string)
     {
-        fprintf(stderr, "field \"command\" in command %d is not a string", errors->command_index + 1);
+        fprintf(stderr, "field \"command\" in command %d is not a string\n", errors->command_index + 1);
         return;
     }
     else if (errors->there_is_no_params)
@@ -161,12 +159,12 @@ void printf_error(struct errors_t *errors)
     }
     else if (errors->there_is_no_deviceid)
     {
-        fprintf(stderr, "there is no deviceID in command %d", errors->command_index + 1);
+        fprintf(stderr, "there is no deviceID in command %d\n", errors->command_index + 1);
         return;
     }
     else if (errors->messageid_is_not_integer)
     {
-        fprintf(stderr, "in command %d messageID aren't integers", errors->command_index + 1);
+        fprintf(stderr, "in command %d messageID aren't integers\n", errors->command_index + 1);
         return;
     }
     else if (errors->wrong_command)
@@ -176,7 +174,7 @@ void printf_error(struct errors_t *errors)
     }
     else if (errors->deviceid_is_not_a_string)
     {
-        fprintf(stderr, "deviceID in command %d is not a string", errors->command_index + 1);
+        fprintf(stderr, "deviceID in command %d is not a string\n", errors->command_index + 1);
         return;
     }
 

@@ -20,7 +20,7 @@ int load_database(const char *file_path, json_t *object) //doesn't work
     }
 }
 
-int _create(json_t *data_array, json_t *message, int messageID)
+int create(json_t *data_array, json_t *message, int messageID)
 {
 
     time_t curTime = time(NULL);
@@ -34,7 +34,7 @@ int _create(json_t *data_array, json_t *message, int messageID)
     return json_array_append(data_array, message);
 }
 
-int _update(json_t *data_array, json_t *message, int messageID)
+int update(json_t *data_array, json_t *message, int messageID)
 {
     if (!json_is_array(data_array))
         return -1;
@@ -59,7 +59,7 @@ int _update(json_t *data_array, json_t *message, int messageID)
     return -1;
 }
 
-int _delete(json_t *data_array, int messageID)
+int delete_object(json_t *data_array, int messageID)
 {
     if (messageID < 1)
         return -1;
@@ -85,7 +85,7 @@ int _delete(json_t *data_array, int messageID)
     return -1;
 }
 
-char *_read(json_t *data_array, int messageID) // NmessageIDs - указатель на массив, где первый элемент -
+char *read(json_t *data_array, int messageID, const char *buffer, size_t buffer_size) // NmessageIDs - указатель на массив, где первый элемент -
 {                                              // количество следующих за ним элеменетов (id сообщений)
     if (messageID == 0)
         return json_dumps(data_array, 0);

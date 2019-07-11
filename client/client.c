@@ -6,7 +6,7 @@
 #include <string.h>
 
 #include <stdio.h>
-#include "commands_file_parse.c"
+#include "commands_file_parse.h"
 
 int main(int argc, char *argv[])
 {
@@ -54,7 +54,7 @@ int main(int argc, char *argv[])
 
     if (connect(sockfd, res->ai_addr, res->ai_addrlen) == -1)
     {
-        fprintf(stderr, "connection: failed");
+        fprintf(stderr, "connection: failed\n");
         return 6;
     }
 
