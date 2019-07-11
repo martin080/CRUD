@@ -85,7 +85,7 @@ int delete_object(json_t *data_array, int messageID)
     return -1;
 }
 
-int read(json_t *data_array, int messageID, char *buffer, size_t buffer_size)
+int read_object(json_t *data_array, int messageID, char *buffer, size_t buffer_size)
 {
     if (messageID == 0)
     {

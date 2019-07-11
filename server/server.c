@@ -13,7 +13,7 @@
 #include "data_base.h"
 
 #define PORT "3490"
-#define BASE_PATH "/home/matrin/code/CRUD/server/data.json"
+#define BASE_PATH "data.json"
 #define BUFFER_SIZE 1024
 
 int set_nonblock(int fd)
@@ -39,7 +39,7 @@ int main()
 {
     fprintf(stdout, "loading database ...\n");
     json_error_t error;
-    json_t *database = json_load_file(BASE_PATH, 0, &error); // sergmentation fault ?????
+    json_t *database = json_load_file(BASE_PATH, 0, &error); 
     if (!database)
     {
         fprintf(stderr, "database loading failed: %s\n", error.text);
@@ -135,7 +135,7 @@ int main()
                 json_t *command = json_object_get(object, "command");
                 const char *command_text = json_string_value(command);
                 json_t *params = json_object_get(object, "params");
-                if (!strcmp(command_text, "create"))
+                if (!strcmp(command_text, "create")) // command == create
                 {
                     if (create(database, params, ID) == -1)
                         send(new_fd, "error", sizeof("error"), 0);
@@ -149,12 +149,12 @@ int main()
                         write_num(fp, ID);
                     }
                 }
-                else if (!strcmp(command_text, "read"))
+                else if (!strcmp(command_text, "read")) //command == read
                 {
                     json_t *msgIDs = json_object_get(params, "messageID");
                     if (json_is_integer(msgIDs))
                     {
-                        int status = read(database, json_integer_value(msgIDs), buffer, 1024);
+                        int status = read_object(database, json_integer_value(msgIDs), buffer, 1024);
                         if (status == -1)
                         {
                             send(new_fd, "read error\n", sizeof("read error\n"), 0);
@@ -175,12 +175,12 @@ int main()
                         {
                             if (!json_is_integer(value))
                                 continue;
-                            read(database, json_integer_value(value), buffer, 1024);
+                            read_object(database, json_integer_value(value), buffer, 1024);
                             send(new_fd, buffer, strlen(buffer), 0);
                         }
                     }
                 }
-                else if (!strcmp(command_text, "update"))
+                else if (!strcmp(command_text, "update")) // command == update
                 {
                     json_t *msgID = json_object_get(params, "messageID");
                     if (!msgID && !json_is_integer(msgID))
@@ -189,11 +189,17 @@ int main()
                         json_decref(msgID);
                         continue;
                     }
+                    int id = json_integer_value(msgID);
                     json_object_del(params, "messageID");
-                    int status = update(database, params, json_integer_value(msgID));
+                    int status = update(database, params, id);
                     char response[128];
-                    snprintf(response, 128, "updating of message %lld was %s", json_integer_value(msgID), (status == -1 ? "failed" : "succeed"));
+                    snprintf(response, 128, "updating of message %d was %s", id, (status == -1 ? "failed" : "succeed"));
+                    if (status != -1)
+                        json_load_file(BASE_PATH, 0, 0);
                     send(new_fd, response, strlen(response), 0);
+                }
+                else if (!strcmp(command_text, "delete")) // command == delete
+                {
                 }
             }
         }
