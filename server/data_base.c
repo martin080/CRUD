@@ -85,13 +85,18 @@ int delete_object(json_t *data_array, int messageID)
     return -1;
 }
 
-char *read(json_t *data_array, int messageID, const char *buffer, size_t buffer_size) // NmessageIDs - указатель на массив, где первый элемент -
-{                                              // количество следующих за ним элеменетов (id сообщений)
+int read(json_t *data_array, int messageID, char *buffer, size_t buffer_size)
+{
     if (messageID == 0)
-        return json_dumps(data_array, 0);
+    {
+        char *object_in_text = json_dumps(data_array, JSON_COMPACT);
+        strncpy(buffer, object_in_text, buffer_size - 1);
+        free(object_in_text);
+        return (strlen(object_in_text) < buffer_size ? 0 : 1);
+    }
 
-    if (!json_is_array(data_array)) // Если json_t* - указатель не на массив, возвращаем NULL
-        return NULL;
+    if (!json_is_array(data_array))
+        return -1;
 
     size_t index;
     json_t *value;
@@ -99,11 +104,17 @@ char *read(json_t *data_array, int messageID, const char *buffer, size_t buffer_
     {
         json_t *messageID_ = json_object_get(value, "messageID");
         if (!messageID_)
-            return NULL;
+            return -1;
         int msgID = json_integer_value(messageID_);
 
         if (msgID == messageID)
-            return json_dumps(value, 0);
+        {
+            char *object_in_text = json_dumps(value, JSON_COMPACT);
+
+            strncpy(buffer, object_in_text, buffer_size - 1);
+            free(object_in_text);
+            return (strlen(object_in_text) < buffer_size ? 0 : 1);
+        }
     }
-    return NULL;
+    return -1;
 }

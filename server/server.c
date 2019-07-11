@@ -13,7 +13,8 @@
 #include "data_base.h"
 
 #define PORT "3490"
-#define BASE_PATH "data.json"
+#define BASE_PATH "/home/matrin/code/CRUD/server/data.json"
+#define BUFFER_SIZE 1024
 
 int set_nonblock(int fd)
 {
@@ -24,9 +25,7 @@ int set_nonblock(int fd)
     return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 #else
     flags = 1;
-    return (ioctrl(fd, FIOBNIO, &fformat_message(char num, char *message, char *name = NULL) {
-
-    } lags));
+    return (ioctrl(fd, FIOBNIO, &flags));
 #endif
 }
 
@@ -38,25 +37,26 @@ int write_num(FILE *fp, int num)
 
 int main()
 {
+    fprintf(stdout, "loading database ...\n");
     json_error_t error;
-    json_t *database = json_load_file(BASE_PATH, 0, &error);
+    json_t *database = json_load_file(BASE_PATH, 0, &error); // sergmentation fault ?????
     if (!database)
     {
-        fprintf(stderr, "failed loading database: %s\n", error.text);
+        fprintf(stderr, "database loading failed: %s\n", error.text);
         return 1;
     }
+    fprintf(stdout, "the database was successfully loaded\n");
 
     FILE *fp = fopen("ID", "rw");
     if (!fp)
     {
-        fprintf(stderr, "failed open id\n");
+        fprintf(stderr, "failed open ID\n");
         return 2;
     }
     int ID;
     fscanf(fp, "%d", &ID);
 
     int sockfd;
-
     struct addrinfo hints, *res;
 
     memset(&hints, 0, sizeof(hints));
@@ -100,11 +100,15 @@ int main()
 
     while (1)
     {
-        static char buffer[1024];
+        static char buffer[BUFFER_SIZE];
         int new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &slen);
-        int nCommand = 0;
         set_nonblock(new_fd);
-        if (recv(new_fd, &nCommand, sizeof(int), MSG_NOSIGNAL) != sizeof(int))
+
+        fprintf(stdout, "new user was connected");
+
+        int nCommand = 0;
+        int size = recv(new_fd, &nCommand, sizeof(int), MSG_NOSIGNAL);
+        if (size != sizeof(int))
         {
             send(new_fd, "error", sizeof("error"), 0);
             shutdown(new_fd, SHUT_RDWR);
@@ -118,7 +122,7 @@ int main()
                 if (size == -1 && errno == EAGAIN)
                 {
                     size = recv(new_fd, buffer, sizeof(buffer), 0);
-                }
+                } // ?????????
                 buffer[size++] = '\0';
                 json_error_t error;
                 json_t *object = json_loads(buffer, 0, &error);
@@ -150,8 +154,17 @@ int main()
                     json_t *msgIDs = json_object_get(params, "messageID");
                     if (json_is_integer(msgIDs))
                     {
-                        char *text = read(database, json_integer_value(msgIDs), NULL, 0);
-                        send(new_fd, text, strlen(text), 0);
+                        int status = read(database, json_integer_value(msgIDs), buffer, 1024);
+                        if (status == -1)
+                        {
+                            send(new_fd, "read error\n", sizeof("read error\n"), 0);
+                            json_decref(msgIDs);
+                            continue;
+                        }
+                        else if (status == 1)
+                            send(new_fd, "not a whole file was read:\n", sizeof("not a whole file was read:\n"), 0);
+                        send(new_fd, buffer, strlen(buffer), 0);
+                        json_decref(msgIDs);
                         continue;
                     }
                     else if (json_is_array(msgIDs))
@@ -162,20 +175,25 @@ int main()
                         {
                             if (!json_is_integer(value))
                                 continue;
-                            char *text = read(database, json_integer_value(value), NULL, 0);
-                            send(new_fd, text, strlen(text), 0);
-                            free(text);
+                            read(database, json_integer_value(value), buffer, 1024);
+                            send(new_fd, buffer, strlen(buffer), 0);
                         }
                     }
                 }
                 else if (!strcmp(command_text, "update"))
                 {
                     json_t *msgID = json_object_get(params, "messageID");
-                    if (!msgID)
+                    if (!msgID && !json_is_integer(msgID))
                     {
-                        send(new_fd, "error", sizeof("error"), 0);
-
+                        send(new_fd, "error getting messageID\n", sizeof("error getting messageID\n"), 0);
+                        json_decref(msgID);
+                        continue;
                     }
+                    json_object_del(params, "messageID");
+                    int status = update(database, params, json_integer_value(msgID));
+                    char response[128];
+                    snprintf(response, 128, "updating of message %lld was %s", json_integer_value(msgID), (status == -1 ? "failed" : "succeed"));
+                    send(new_fd, response, strlen(response), 0);
                 }
             }
         }

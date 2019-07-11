@@ -66,7 +66,7 @@ int main(int argc, char *argv[])
     {
         char *json_in_text = json_dumps(value, JSON_COMPACT);
         send(sockfd, json_in_text, strlen(json_in_text), 0);
-        free(json_in_text);
+        free(json_in_text); 
     }
 
     static char buffer[1024]; int size;
