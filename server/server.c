@@ -132,18 +132,23 @@ int main()
                     continue;
                 }
 
+                char response[128];
+
                 json_t *command = json_object_get(object, "command");
                 const char *command_text = json_string_value(command);
+
                 json_t *params = json_object_get(object, "params");
                 if (!strcmp(command_text, "create")) // command == create
                 {
                     if (create(database, params, ID) == -1)
-                        send(new_fd, "error", sizeof("error"), 0);
+                    {
+                        snprintf(response,128 ,"Error creating new data, please try again");
+                        send(new_fd, response, strlen(response), 0);
+                    }
                     else
                     {
-                        char respond[128];
-                        snprintf(respond, 128, "messageID is %d", ID++);
-                        send(new_fd, respond, strlen(respond), 0);
+                        snprintf(response, 128, "Data was loaded successfully, messageID is %d", ID++);
+                        send(new_fd, response, strlen(response), 0);
                         json_dump_file(database, BASE_PATH, 0);
 
                         write_num(fp, ID);
@@ -154,15 +159,20 @@ int main()
                     json_t *msgIDs = json_object_get(params, "messageID");
                     if (json_is_integer(msgIDs))
                     {
-                        int status = read_object(database, json_integer_value(msgIDs), buffer, 1024);
+                        int id = json_integer_value(msgIDs);
+                        int status = read_object(database, id, buffer, 1024);
                         if (status == -1)
                         {
-                            send(new_fd, "read error\n", sizeof("read error\n"), 0);
+                            snprintf(response,128 ,"Error reading data, messageID = %d", id);
+                            send(new_fd, response, strlen(response), 0);
                             json_decref(msgIDs);
                             continue;
                         }
                         else if (status == 1)
-                            send(new_fd, "not a whole file was read:\n", sizeof("not a whole file was read:\n"), 0);
+                        {
+                            snprintf(response, 128, "not a whole data was from message %d read:\n", id );
+                            send(new_fd, response, strlen(response), 0);
+                        }
                         send(new_fd, buffer, strlen(buffer), 0);
                         json_decref(msgIDs);
                         continue;
@@ -178,24 +188,36 @@ int main()
                             read_object(database, json_integer_value(value), buffer, 1024);
                             send(new_fd, buffer, strlen(buffer), 0);
                         }
+                        json_decref(msgIDs);
                     }
+                    else
+                    {
+                        snprintf(response, 128,"Wrong messageID format in command %d", i + 1);
+                        send(new_fd, response, strlen(response), 0);
+                        json_decref(msgIDs);
+                    }
+                    
                 }
                 else if (!strcmp(command_text, "update")) // command == update
                 {
                     json_t *msgID = json_object_get(params, "messageID");
-                    if (!msgID && !json_is_integer(msgID))
+                    if (!msgID || !json_is_integer(msgID))
                     {
-                        send(new_fd, "error getting messageID\n", sizeof("error getting messageID\n"), 0);
+                        snprintf(response, 128, "Wrong messageID format in command %d", i + 1);
+                        send(new_fd, response, strlen(response), 0);
                         json_decref(msgID);
                         continue;
                     }
+
                     int id = json_integer_value(msgID);
+
                     json_object_del(params, "messageID");
+                        
                     int status = update(database, params, id);
                     char response[128];
                     snprintf(response, 128, "updating of message %d was %s", id, (status == -1 ? "failed" : "succeed"));
                     if (status != -1)
-                        json_load_file(BASE_PATH, 0, 0);
+                        json_dump_file(database, BASE_PATH, 0);
                     send(new_fd, response, strlen(response), 0);
                 }
                 else if (!strcmp(command_text, "delete")) // command == delete

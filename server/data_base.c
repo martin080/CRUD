@@ -53,6 +53,10 @@ int update(json_t *data_array, json_t *message, int messageID)
 
         if (messageID == msgID)
         {
+            time_t curTime = time(NULL);
+            char *time = ctime(&curTime);   
+            if (json_object_set_new(value, "time", json_stringn(time, strlen(time) - 1)) == -1)
+                return -1;
             return json_object_update(value, message);
         }
     }
