@@ -1,39 +1,35 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <sys/poll.h>
+#include <fcntl.h>
 
 #include <jansson.h>
 #include <string.h>
 
 #include <unistd.h>
+#include <errno.h>
 
 #include <stdio.h>
 #include "commands_file_parse.h"
 
+#define BUFFER_SIZE 1024
+
+int set_nonblock(int fd)
+{
+    int flags;
+#if defined(O_NONBLOCK)
+    if (-1 == (flags = fcntl(fd, F_GETFL, 0)))
+        flags = 0;
+    return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+#else
+    flags = 1;
+    return (ioctrl(fd, FIOBNIO, &flags));
+#endif
+}
+
 int main(int argc, char *argv[])
 {
-    if (argc != 2)
-    {
-        fprintf(stderr, "usage: ./client COMMAND_FILE\n");
-        return 1;
-    }
-
-    json_error_t error;
-    json_t *commands = json_load_file(argv[1], 0, &error);
-    if (!commands)
-    {
-        fprintf(stderr, "failed load the file: %s\n", error.text);
-        return 2;
-    }
-
-    struct errors_t errors;
-    memset(&errors, 0, sizeof(errors));
-    if (check(commands, &errors) == -1)
-    {
-        printf_error(&errors);
-        return 3;
-    }
-
     struct addrinfo hints, *res;
     int sockfd;
 
@@ -60,27 +56,101 @@ int main(int argc, char *argv[])
         return 6;
     }
 
-    int n = json_array_size(commands);
-    send(sockfd, &n, sizeof(n), 0);
+    set_nonblock(sockfd);
+    freeaddrinfo(res);
 
-    char buffer[1024];
-    int size;   
-    json_t *value;
-    size_t index;
-    json_array_foreach(commands, index, value)
+    struct pollfd pfd[2];
+    pfd[0].fd = 0;
+    pfd[0].events = POLLIN;
+
+    pfd[1].fd = sockfd;
+    pfd[1].events = POLLIN | POLLHUP;
+
+    char buffer[BUFFER_SIZE];
+    char buf_command[64], buf_argument[64];
+
+    while (1)
     {
-        char *json_in_text = json_dumps(value, JSON_COMPACT);
-        send(sockfd, json_in_text, strlen(json_in_text), 0);
-        free(json_in_text);
-
-        usleep(100000);
-
-        int size = recv(sockfd, buffer, sizeof(buffer), MSG_NOSIGNAL);
-        if (size != -1)
+        int ret = poll(pfd, 2, -1);
+        if (ret == -1)
         {
+            fprintf(stderr, "poll() failed\n");
+            return 0;
+        }
+
+        if (pfd[0].revents & POLLIN)
+        {
+            pfd[0].revents = 0;
+            scanf("%s %s", buf_command, buf_argument);
+
+            if (!strcmp(buf_command, "send"))
+            {
+                json_error_t error;
+                json_t *commands = json_load_file(buf_argument, 0, &error);
+                if (!commands)
+                {
+                    fprintf(stderr, "  failed load the file \"%s\": %s\n", buf_argument,error.text);
+                    json_decref(commands);
+                    continue;
+                }
+
+                struct errors_t errors;
+                memset(&errors, 0, sizeof(errors));
+                if (check(commands, &errors) == -1)
+                {
+                    printf_error(&errors);
+                    json_decref(commands);
+                    return 3;
+                }
+
+                json_t *value; size_t index;
+                json_array_foreach(commands, index, value)
+                {
+                    char *object_in_text = json_dumps(value, JSON_COMPACT);
+                    send(sockfd, object_in_text, strlen(object_in_text), 0);
+                    free(object_in_text);
+
+                    usleep(1000);
+                }
+            }
+            else if (!strcmp(buf_command, "exit"))
+            {
+                printf("exit ...\n");
+                shutdown(sockfd, SHUT_RDWR);
+                return 7;
+            }
+            else 
+                printf("wrong command \"%s\"\n", buf_command);
+            lseek(0, 0, SEEK_END);
+        }
+
+        if (pfd[1].revents & POLLHUP)
+        {
+            printf("  connection lost\n");
+            shutdown(pfd[1].fd, SHUT_RDWR);
+            return 6;
+        }
+
+        if (pfd[1].revents & POLLIN)
+        {
+            pfd[1].revents = 0;
+
+            ssize_t size = recv(pfd[1].fd, buffer, BUFFER_SIZE - 1, 0);
             buffer[size] = '\0';
             printf("%s\n", buffer);
+
+            if (size < 0)
+            {
+                fprintf(stderr, "recv() failed\n");
+                return 8;
+            }
+            else if (size == 0 && errno != EAGAIN)
+            {
+                fprintf (stderr, "connection lost\n");
+                return 9;
+            }
+
+            
         }
     }
-    freeaddrinfo(res);
 }
