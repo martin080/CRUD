@@ -32,10 +32,10 @@ int set_nonblock(int fd)
 #endif
 }
 
-int write_num(int fd, int num)
+int write_num(FILE *fp, int num)
 {
-    lseek(fd, 0, SEEK_SET);
-    return write(fd, &num, sizeof(num));
+    fseek(fp, 0, SEEK_SET);
+    return fprintf(fp,"%d", num);
 }
 
 int main()
@@ -50,9 +50,8 @@ int main()
     }
     fprintf(stdout, "the database was successfully loaded\n");
 
-    int id_file = open("ID", O_RDWR);
-    int ID;
-    write(id_file, &ID, sizeof(ID));
+    FILE *id_file = fopen("ID", "r+");
+    int ID; fscanf(id_file, "%d", &ID);
 
     int sockfd;
     struct addrinfo hints, *res;

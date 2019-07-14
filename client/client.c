@@ -50,11 +50,13 @@ int main(int argc, char *argv[])
         return 5;
     };
 
+    printf("connection to the server ...\n");
     if (connect(sockfd, res->ai_addr, res->ai_addrlen) == -1)
     {
         fprintf(stderr, "connection: failed\n");
         return 6;
     }
+    printf("connect: success\n");
 
     set_nonblock(sockfd);
     freeaddrinfo(res);
@@ -81,10 +83,11 @@ int main(int argc, char *argv[])
         if (pfd[0].revents & POLLIN)
         {
             pfd[0].revents = 0;
-            scanf("%s %s", buf_command, buf_argument);
+            scanf("%s", buf_command);
 
             if (!strcmp(buf_command, "send"))
             {
+                scanf("%s", buf_argument);
                 json_error_t error;
                 json_t *commands = json_load_file(buf_argument, 0, &error);
                 if (!commands)
@@ -100,7 +103,7 @@ int main(int argc, char *argv[])
                 {
                     printf_error(&errors);
                     json_decref(commands);
-                    return 3;
+                    continue;
                 }
 
                 json_t *value; size_t index;
@@ -115,13 +118,11 @@ int main(int argc, char *argv[])
             }
             else if (!strcmp(buf_command, "exit"))
             {
-                printf("exit ...\n");
-                shutdown(sockfd, SHUT_RDWR);
+                close(sockfd);
                 return 7;
             }
             else 
                 printf("wrong command \"%s\"\n", buf_command);
-            lseek(0, 0, SEEK_END);
         }
 
         if (pfd[1].revents & POLLHUP)
@@ -149,8 +150,6 @@ int main(int argc, char *argv[])
                 fprintf (stderr, "connection lost\n");
                 return 9;
             }
-
-            
         }
     }
 }
