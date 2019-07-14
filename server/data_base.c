@@ -94,9 +94,12 @@ int read_object(json_t *data_array, int messageID, char *buffer, size_t buffer_s
     if (messageID == 0)
     {
         char *object_in_text = json_dumps(data_array, JSON_COMPACT);
+        if (!object_in_text)
+            return -1;
         strncpy(buffer, object_in_text, buffer_size - 1);
+        int len = strlen(object_in_text);
         free(object_in_text);
-        return (strlen(object_in_text) < buffer_size ? 0 : 1);
+        return (len < buffer_size ? len : buffer_size);
     }
 
     if (!json_is_array(data_array))
@@ -107,17 +110,21 @@ int read_object(json_t *data_array, int messageID, char *buffer, size_t buffer_s
     json_array_foreach(data_array, index, value)
     {
         json_t *messageID_ = json_object_get(value, "messageID");
-        if (!messageID_)
-            return -1;
+        if (!messageID_ || !json_is_integer(messageID_))
+            continue;
+
         int msgID = json_integer_value(messageID_);
 
         if (msgID == messageID)
         {
             char *object_in_text = json_dumps(value, JSON_COMPACT);
+            if (!object_in_text)
+                return -1;
 
             strncpy(buffer, object_in_text, buffer_size - 1);
+            int len = strlen(object_in_text);
             free(object_in_text);
-            return (strlen(object_in_text) < buffer_size ? 0 : 1);
+            return (len < buffer_size ? len : buffer_size);
         }
     }
     return -1;

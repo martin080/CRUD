@@ -5,6 +5,8 @@
 #include <jansson.h>
 #include <string.h>
 
+#include <unistd.h>
+
 #include <stdio.h>
 #include "commands_file_parse.h"
 
@@ -61,20 +63,24 @@ int main(int argc, char *argv[])
     int n = json_array_size(commands);
     send(sockfd, &n, sizeof(n), 0);
 
-    json_t *value; size_t index;
+    char buffer[1024];
+    int size;   
+    json_t *value;
+    size_t index;
     json_array_foreach(commands, index, value)
     {
         char *json_in_text = json_dumps(value, JSON_COMPACT);
         send(sockfd, json_in_text, strlen(json_in_text), 0);
-        free(json_in_text); 
-    }
+        free(json_in_text);
 
-    static char buffer[1024]; int size;
-    while ((size = recv(sockfd, buffer, sizeof(buffer), MSG_NOSIGNAL)))
-    {
-        buffer[size++] = '\0';
-        printf("%s\n", buffer);
-    }
+        usleep(100000);
 
+        int size = recv(sockfd, buffer, sizeof(buffer), MSG_NOSIGNAL);
+        if (size != -1)
+        {
+            buffer[size] = '\0';
+            printf("%s\n", buffer);
+        }
+    }
     freeaddrinfo(res);
 }
