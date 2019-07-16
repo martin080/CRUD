@@ -105,7 +105,7 @@ int main()
 
     struct pollfd pfd[MAX_CONNECTIONS + 1];
     pfd[0].fd = sockfd;
-    pfd[0].events = POLLIN | POLLHUP;
+    pfd[0].events = POLLIN;
     for (int i = 1; i < MAX_CONNECTIONS + 1; i++)
         pfd[i].fd = -1;
     int cur_connections = 0;
@@ -113,7 +113,7 @@ int main()
     while (1)
     {
         static char buffer[BUFFER_SIZE], response[128];
-        int ret = poll(pfd, MAX_CONNECTIONS + 1, -1);
+        int ret = poll(pfd, cur_connections + 1, -1);
 
         if (ret == -1)
         {
@@ -129,27 +129,23 @@ int main()
                 new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &slen);
                 if (new_fd < 0)
                     continue;
-                printf("  new connection on socket %d\n", new_fd);
 
                 set_nonblock(new_fd);
 
-                int i = 1;
-                for (; i < MAX_CONNECTIONS + 1; i++)
+                if (cur_connections < MAX_CONNECTIONS)
                 {
-                    if (pfd[i].fd == -1)
-                    {
-                        pfd[i].fd = new_fd;
-                        pfd[i].events = POLLIN;
-                        cur_connections++;
-                        break;
-                    }
+                    pfd[cur_connections + 1].fd = new_fd;
+                    pfd[cur_connections + 1].events = POLLIN | POLLHUP;
+                    cur_connections++;
+
+                    printf("  new connection on socket %d\n", new_fd);
+
+                    continue;
                 }
-                if (i == MAX_CONNECTIONS + 1)
-                {
-                    strcpy(response, "server is unable to serve you, please try later\n");
-                    send(new_fd, response, strlen(response), 0);
-                    shutdown(new_fd, SHUT_RDWR);
-                }
+
+                strcpy(response, "server is unable to serve you, please try later\n");
+                send(new_fd, response, strlen(response), 0);
+                close(new_fd);
             }
         }
         for (int i = 1; i < cur_connections + 1; i++)
@@ -157,13 +153,14 @@ int main()
             if (pfd[i].revents & POLLHUP)
             {
                 printf("  connection was lost, socket %d\n", pfd[i].fd);
+                pfd[i].revents = 0;
 
                 close(pfd[i].fd);
                 for (int j = i; j < cur_connections; j++)
                 {
                     pfd[j].fd = pfd[j + 1].fd;
-                    pfd[j].revents = pfd[j + 1].revents;
                     pfd[j].events = pfd[j + 1].events;
+                    pfd[j].revents = pfd[j + 1].revents;
                 }
                 cur_connections--;
                 continue;
@@ -178,9 +175,9 @@ int main()
             printf("  reading from socket %d ... \n", new_fd);
 
             int size = recv(new_fd, buffer, sizeof(buffer), MSG_NOSIGNAL);
-            if (size == -1 && errno != EAGAIN)
+            if (size == -1)
             {
-                printf("  recv() on socket %d failed\n", pfd[i].fd);
+                printf("recv() on socket %d failed\n", new_fd);
                 continue;
             }
 
@@ -207,12 +204,15 @@ int main()
                 if (create(database, params, ID) == -1)
                 {
                     snprintf(response, 128, "Error creating new data, please try again");
-                    send(new_fd, response, strlen(response), 0);
+                    if (send(new_fd, response, strlen(response), 0) == -1)
+                        printf("send() on socket %d failed", new_fd);
                 }
                 else
                 {
                     snprintf(response, 128, "Data was loaded successfully, messageID is %d", ID);
-                    send(new_fd, response, strlen(response), 0);
+                    if (send(new_fd, response, strlen(response), 0) == -1)
+                        printf("send() on socket %d failed", new_fd);
+
                     json_dump_file(database, BASE_PATH, 0);
 
                     write_num(id_file, ++ID);
@@ -239,7 +239,8 @@ int main()
                     {
                         buffer[size++] = '\n';
                         buffer[size] = 0;
-                        send(new_fd, buffer, strlen(buffer), 0);
+                        if (send(new_fd, buffer, strlen(buffer), 0) == -1)
+                            printf("send() on socket %d failed", new_fd);
 
                         printf("  data \"%s\" is sending on socket %d\n", buffer, pfd[i].fd);
 
@@ -249,7 +250,8 @@ int main()
 
                     buffer[size++] = '\n';
                     buffer[size] = '\0';
-                    send(new_fd, buffer, strlen(buffer), 0);
+                    if (send(new_fd, buffer, strlen(buffer), 0) == -1)
+                        printf("send() on socket %d failed", new_fd);
 
                     printf("  data \"%s\" is sending on socket %d\n", buffer, pfd[i].fd);
 
@@ -269,7 +271,8 @@ int main()
                         if (size == -1)
                         {
                             snprintf(response, 128, "Error reading data, messageID = %d\n", id);
-                            send(new_fd, response, strlen(response), 0);
+                            if (send(new_fd, response, strlen(response), 0) == -1)
+                                printf("send() on socket %d failed", new_fd);
                         }
 
                         was_read += size;
@@ -280,17 +283,23 @@ int main()
                         }
                         else
                         {
-                            send(new_fd, buffer, strlen(buffer), 0);
+                            if (send(new_fd, buffer, strlen(buffer), 0) == -1)
+                                printf("send() on socket %d failed", new_fd);
+
                             was_read = 0;
                         }
                     }
-                    send(new_fd, buffer, strlen(buffer), 0);
+                    if (send(new_fd, buffer, strlen(buffer), 0))
+                        printf("send() on socket %d failed", new_fd);
+
                     json_decref(msgIDs);
                 }
                 else
                 {
                     snprintf(response, 128, "Wrong messageID format in command %d", i + 1);
-                    send(new_fd, response, strlen(response), 0);
+                    if (send(new_fd, response, strlen(response), 0) == -1)
+                        printf("send() on socket %d failed", new_fd);
+                        
                     json_decref(msgIDs);
                 }
             }
@@ -302,7 +311,9 @@ int main()
                     printf("error processing request on socket %d\n", new_fd);
 
                     snprintf(response, 128, "Wrong messageID format in command %d", i + 1);
-                    send(new_fd, response, strlen(response), 0);
+                    if (send(new_fd, response, strlen(response), 0) == -1)
+                        printf("send() on socket %d failed", new_fd);
+
                     json_decref(msgID);
                     continue;
                 }
@@ -315,7 +326,8 @@ int main()
                 snprintf(response, 128, "updating of message %d was %s", id, (status == -1 ? "failed" : "succeed"));
                 if (status != -1)
                     json_dump_file(database, BASE_PATH, 0);
-                send(new_fd, response, strlen(response), 0);
+                if (send(new_fd, response, strlen(response), 0) == -1)
+                    printf("send() on socket %d failed", new_fd);
             }
             else if (!strcmp(command_text, "delete")) // command == delete
             {
@@ -329,7 +341,9 @@ int main()
                         printf("error processing request on socket %d\n", new_fd);
 
                         snprintf(response, 128, "Error delete data, messageID = %d", id);
-                        send(new_fd, response, strlen(response), 0);
+                        if (send(new_fd, response, strlen(response), 0) == -1)
+                            printf("send() on socket %d failed", new_fd);
+
                         json_decref(msgIDs);
                         continue;
                     }
@@ -337,7 +351,9 @@ int main()
                     snprintf(response, 128, "message %d was deleted (command %d)", id, i + 1);
                     json_decref(msgIDs);
 
-                    send(new_fd, response, strlen(response), 0);
+                    if (send(new_fd, response, strlen(response), 0) == -1)
+                        printf("send() on socket %d failed", new_fd);
+
                     continue;
                 }
                 else if (json_is_array(msgIDs))
@@ -357,7 +373,8 @@ int main()
                             snprintf(response, 128, "message %d was deleted (command %d)", id, i + 1);
                             json_dump_file(database, BASE_PATH, 0);
                         }
-                        send(new_fd, response, strlen(response), 0);
+                        if (send(new_fd, response, strlen(response), 0))
+                            printf("send() on socket %d failed", new_fd);
                     }
                     json_decref(msgIDs);
                 }
@@ -366,7 +383,8 @@ int main()
                     json_decref(msgIDs);
 
                     snprintf(response, 128, "Wrong messageID format in command %d", i + 1);
-                    send(new_fd, response, strlen(response), 0);
+                    if (send(new_fd, response, strlen(response), 0) == -1)
+                        printf("send() on socket %d failed", new_fd);
                 }
             }
             json_decref(command);

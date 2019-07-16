@@ -145,7 +145,7 @@ int main(int argc, char *argv[])
         if (pfd[1].revents & POLLHUP)
         {
             printf("  connection lost\n");
-            shutdown(pfd[1].fd, SHUT_RDWR);
+            close(sockfd);
             return 6;
         }
 
