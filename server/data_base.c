@@ -89,15 +89,15 @@ int delete_object(json_t *data_array, int messageID)
     return -1;
 }
 
-int read_object(json_t *data_array, int messageID, char *buffer, size_t buffer_size)
+int read_object(json_t *data_array, int messageID, char *buffer, size_t buffer_size, size_t was_read)
 {
     if (messageID == 0)
     {
         char *object_in_text = json_dumps(data_array, JSON_COMPACT);
         if (!object_in_text)
             return -1;
-        strncpy(buffer, object_in_text, buffer_size - 1);
-        int len = strlen(object_in_text);
+        strncpy(buffer, object_in_text + was_read, buffer_size - 1);
+        int len = strlen(object_in_text + was_read);
         free(object_in_text);
         return (len < buffer_size ? len : buffer_size);
     }

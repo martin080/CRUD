@@ -1,4 +1,5 @@
 #include "commands_file_parse.h"
+#include "getmac.h"
 
 int check(json_t *commands, struct errors_t *errors)
 {
@@ -56,26 +57,8 @@ int check(json_t *commands, struct errors_t *errors)
             return -1;
         }
         const char *command_value = json_string_value(command);
-        json_t *deviceID = json_object_get(params, "deviceID");
-        if (deviceID != NULL && !json_is_string(deviceID))
-        {
-            errors->is_errors = 1;
-            errors->command_index = index;
-            errors->deviceid_is_not_a_string = 1;
-            return -1;
-        }
-
-        if (!strcmp(command_value, "create"))
-        {
-            if (deviceID == NULL)
-            {
-                errors->is_errors = 1;
-                errors->command_index = index;
-                errors->there_is_no_deviceid = 1;
-                return -1;
-            }
-        }
-        else if (!strcmp(command_value, "read") || !strcmp(command_value, "delete"))
+        
+        if (!strcmp(command_value, "read") || !strcmp(command_value, "delete"))
         {
             json_t *messageID = json_object_get(params, "messageID");
             if (json_is_array(messageID))
@@ -111,6 +94,12 @@ int check(json_t *commands, struct errors_t *errors)
                 errors->messageid_is_not_integer = 1;
                 return -1;
             }
+        }
+        else if (!strcmp(command_value, "create"))
+        {
+            unsigned char mac[13];
+            mac_eth0(mac);
+            json_object_set_new(params, "deviceID", json_string(mac));
         }
         else
         {

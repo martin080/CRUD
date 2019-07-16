@@ -15,9 +15,9 @@
 #include "data_base.h"
 
 #define PORT "3490"
-#define BASE_PATH "/home/matrin/code/CRUD/server/data.json"
+#define BASE_PATH "data.json"
 #define MAX_CONNECTIONS 10
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 2048
 
 int set_nonblock(int fd)
 {
@@ -35,7 +35,7 @@ int set_nonblock(int fd)
 int write_num(FILE *fp, int num)
 {
     fseek(fp, 0, SEEK_SET);
-    return fprintf(fp,"%d", num);
+    return fprintf(fp, "%d", num);
 }
 
 int main()
@@ -51,7 +51,14 @@ int main()
     fprintf(stdout, "the database was successfully loaded\n");
 
     FILE *id_file = fopen("ID", "r+");
-    int ID; fscanf(id_file, "%d", &ID);
+    if (!id_file)
+    {
+        fprintf(stderr, "ID file open failed\n");
+        return 2;
+    }
+    int ID;
+    fscanf(id_file, "%d", &ID);
+    ID++;
 
     int sockfd;
     struct addrinfo hints, *res;
@@ -81,7 +88,7 @@ int main()
 
     if (bind(sockfd, res->ai_addr, res->ai_addrlen) == -1)
     {
-        fprintf(stderr, "bind failed: %s\n",strerror(errno));
+        fprintf(stderr, "bind failed: %s\n", strerror(errno));
         exit(2);
     }
 
@@ -149,14 +156,14 @@ int main()
         {
             if (pfd[i].revents & POLLHUP)
             {
-                printf("  connection on socket %d was shut\n", pfd[i].fd);
+                printf("  connection was lost, socket %d\n", pfd[i].fd);
 
                 close(pfd[i].fd);
                 for (int j = i; j < cur_connections; j++)
                 {
                     pfd[j].fd = pfd[j + 1].fd;
                     pfd[j].revents = pfd[j + 1].revents;
-                    pfd[j].events = pfd[j+1].events;
+                    pfd[j].events = pfd[j + 1].events;
                 }
                 cur_connections--;
                 continue;
@@ -175,9 +182,12 @@ int main()
             {
                 printf("  recv() on socket %d failed\n", pfd[i].fd);
                 continue;
-            } 
+            }
 
-            buffer[size++] = '\0';
+            buffer[size] = '\0';
+
+            printf("  client request: %s \n", buffer);
+
             json_error_t error;
             json_t *object = json_loads(buffer, 0, &error);
             if (!object)
@@ -201,11 +211,11 @@ int main()
                 }
                 else
                 {
-                    snprintf(response, 128, "Data was loaded successfully, messageID is %d", ID++);
+                    snprintf(response, 128, "Data was loaded successfully, messageID is %d", ID);
                     send(new_fd, response, strlen(response), 0);
                     json_dump_file(database, BASE_PATH, 0);
 
-                    write_num(id_file, ID);
+                    write_num(id_file, ++ID);
                 }
             }
             else if (!strcmp(command_text, "read")) //command == read
@@ -215,52 +225,60 @@ int main()
                 if (json_is_integer(msgIDs))
                 {
                     int id = json_integer_value(msgIDs);
-                    int status = read_object(database, id, buffer, BUFFER_SIZE - 1);
-                    if (status == -1)
+                    ssize_t was_read = 0, size;
+                    size = read_object(database, id, buffer, BUFFER_SIZE - 2, was_read);
+                    was_read += size;
+                    if (size == -1)
                     {
                         snprintf(response, 128, "Error reading data, messageID = %d", id);
                         send(new_fd, response, strlen(response), 0);
                         json_decref(msgIDs);
                         continue;
                     }
-                    else if (status == 0)
+                    while (size == BUFFER_SIZE - 2)
                     {
-                        snprintf(response, 128, "not a whole data was from message %d read:\n", id);
-                        send(new_fd, response, strlen(response), 0);
+                        buffer[size++] = '\n';
+                        buffer[size] = 0;
+                        send(new_fd, buffer, strlen(buffer), 0);
+
+                        printf("  data \"%s\" is sending on socket %d\n", buffer, pfd[i].fd);
+
+                        size = read_object(database, id, buffer, BUFFER_SIZE - 2, was_read);
+                        was_read += size;
                     }
+
+                    buffer[size++] = '\n';
+                    buffer[size] = '\0';
                     send(new_fd, buffer, strlen(buffer), 0);
+
+                    printf("  data \"%s\" is sending on socket %d\n", buffer, pfd[i].fd);
+
                     json_decref(msgIDs);
                 }
                 else if (json_is_array(msgIDs))
                 {
                     json_t *value;
                     size_t index;
-                    size_t was_read = 0;
+                    ssize_t was_read = 0;
                     json_array_foreach(msgIDs, index, value)
                     {
                         if (!json_is_integer(value))
                             continue;
                         int id = json_integer_value(value);
-                        int size = read_object(database, id, buffer + was_read, BUFFER_SIZE - was_read);
+                        ssize_t size = read_object(database, id, buffer + was_read, BUFFER_SIZE - 2, 0);
                         if (size == -1)
                         {
-                            snprintf(response, 128, "Error reading data, messageID = %d (command %d)\n", id, i + 1);
-                            send(new_fd, response, strlen(response), 0);
-                            json_decref(msgIDs);
-                            continue;
-                        }
-                        else if (size == 0)
-                        {
-                            snprintf(response, 128, "not a whole data was from message %d read:\n", id);
+                            snprintf(response, 128, "Error reading data, messageID = %d\n", id);
                             send(new_fd, response, strlen(response), 0);
                         }
+
                         was_read += size;
-                        if (was_read < 1023)
+                        if (was_read < BUFFER_SIZE - 2)
                         {
                             buffer[was_read++] = '\n';
                             buffer[was_read] = '\0';
                         }
-                        else 
+                        else
                         {
                             send(new_fd, buffer, strlen(buffer), 0);
                             was_read = 0;
@@ -294,7 +312,6 @@ int main()
                 json_object_del(params, "messageID");
 
                 int status = update(database, params, id);
-                char response[128];
                 snprintf(response, 128, "updating of message %d was %s", id, (status == -1 ? "failed" : "succeed"));
                 if (status != -1)
                     json_dump_file(database, BASE_PATH, 0);

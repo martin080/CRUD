@@ -4,6 +4,9 @@
 #include <sys/poll.h>
 #include <fcntl.h>
 
+#include <sys/ioctl.h>
+#include <net/if.h>
+
 #include <jansson.h>
 #include <string.h>
 
@@ -13,7 +16,7 @@
 #include <stdio.h>
 #include "commands_file_parse.h"
 
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 2048
 
 int set_nonblock(int fd)
 {
@@ -26,6 +29,19 @@ int set_nonblock(int fd)
     flags = 1;
     return (ioctrl(fd, FIOBNIO, &flags));
 #endif
+}
+
+void mac_eth0(unsigned char MAC_str[13])
+{
+    #define HWADDR_len 6
+    int s,i;
+    struct ifreq ifr;
+    s = socket(AF_INET, SOCK_DGRAM, 0);
+    strcpy(ifr.ifr_name, "br-wlan");
+    ioctl(s, SIOCGIFHWADDR, &ifr);
+    for (i=0; i<HWADDR_len; i++)
+        sprintf(&MAC_str[i*2],"%02X",((unsigned char*)ifr.ifr_hwaddr.sa_data)[i]);
+    MAC_str[12]='\0';
 }
 
 int main(int argc, char *argv[])
@@ -92,7 +108,7 @@ int main(int argc, char *argv[])
                 json_t *commands = json_load_file(buf_argument, 0, &error);
                 if (!commands)
                 {
-                    fprintf(stderr, "  failed load the file \"%s\": %s\n", buf_argument,error.text);
+                    fprintf(stderr, "  failed load the file \"%s\": %s\n", buf_argument, error.text);
                     json_decref(commands);
                     continue;
                 }
@@ -106,7 +122,8 @@ int main(int argc, char *argv[])
                     continue;
                 }
 
-                json_t *value; size_t index;
+                json_t *value;
+                size_t index;
                 json_array_foreach(commands, index, value)
                 {
                     char *object_in_text = json_dumps(value, JSON_COMPACT);
@@ -121,7 +138,7 @@ int main(int argc, char *argv[])
                 close(sockfd);
                 return 7;
             }
-            else 
+            else
                 printf("wrong command \"%s\"\n", buf_command);
         }
 
@@ -137,8 +154,13 @@ int main(int argc, char *argv[])
             pfd[1].revents = 0;
 
             ssize_t size = recv(pfd[1].fd, buffer, BUFFER_SIZE - 1, 0);
-            buffer[size] = '\0';
-            printf("%s\n", buffer);
+
+            while (size == BUFFER_SIZE - 1)
+            {
+                buffer[size] = '\0';
+                printf("%s", buffer);
+                size = recv(pfd[1].fd, buffer, BUFFER_SIZE - 1, 0);
+            }
 
             if (size < 0)
             {
@@ -147,9 +169,12 @@ int main(int argc, char *argv[])
             }
             else if (size == 0 && errno != EAGAIN)
             {
-                fprintf (stderr, "connection lost\n");
+                fprintf(stderr, "connection lost\n");
                 return 9;
             }
+
+            buffer[size] = '\0';
+            printf("%s\n", buffer);
         }
     }
 }

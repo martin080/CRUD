@@ -10,5 +10,5 @@ int update(json_t *, json_t *, int);
 
 int delete_object(json_t *, int );
 
-int read_object(json_t *, int, char *, size_t);
+int read_object(json_t *, int, char *, size_t, size_t);
 
