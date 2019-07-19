@@ -1,27 +1,29 @@
 #include "data_base.h"
 
-#define data_base_path "data.json"
-
-int load_database(const char *file_path, json_t *object) //doesn't work
+int init_database()
 {
-    FILE *fp = fopen(file_path, "r");
-    if (!fp)
-    {
-        fprintf(stderr, "unable open the file %s\n", file_path);
-        return -1;
-    }
-
     json_error_t error;
-    object = json_loadf(fp, 0, &error);
-    if (!object)
-    {
-        fprintf(stderr, "error: on line %d: %s\n", error.line, error.text);
+    data_array = json_load_file(BASE_PATH, 0, &error);
+    if (!data_array)
         return -1;
-    }
+
+    FILE *ID = fopen(ID_PATH, "r+");
+
+    if (ID == NULL)
+        return -2;
+
+    fscanf(ID, "%d", &messageID);
+
+    return 0;
 }
 
-int create(json_t *data_array, json_t *message, int messageID)
+int create_object(json_t *message)
 {
+    if (!json_is_array(data_array))
+        return -2;
+
+    if (messageID == 0)
+        return -3;
 
     time_t curTime = time(NULL);
     char *time = ctime(&curTime);
@@ -31,13 +33,16 @@ int create(json_t *data_array, json_t *message, int messageID)
     if (json_object_set_new(message, "messageID", json_integer(messageID)) == -1)
         return -1;
 
-    return json_array_append(data_array, message);
+    int ret = json_array_append(data_array, message);
+    json_dump_file(data_array, BASE_PATH, 0);
+
+    return ret;
 }
 
-int update(json_t *data_array, json_t *message, int messageID)
+int update_object(json_t *message, int messageID)
 {
     if (!json_is_array(data_array))
-        return -1;
+        return -2;
 
     if (!json_is_object(message))
         return -1;
@@ -54,21 +59,23 @@ int update(json_t *data_array, json_t *message, int messageID)
         if (messageID == msgID)
         {
             time_t curTime = time(NULL);
-            char *time = ctime(&curTime);   
+            char *time = ctime(&curTime);
             if (json_object_set_new(value, "time", json_stringn(time, strlen(time) - 1)) == -1)
                 return -1;
-            return json_object_update(value, message);
+            int ret = json_object_update(value, message);
+            json_dump_file(data_array, BASE_PATH, 0);
+            return ret;
         }
     }
     return -1;
 }
 
-int delete_object(json_t *data_array, int messageID)
+int delete_object(int messageID)
 {
-    if (messageID < 1)
-        return -1;
-
     if (!json_is_array(data_array))
+        return -2;
+
+    if (messageID < 1)
         return -1;
 
     size_t index;
@@ -83,21 +90,25 @@ int delete_object(json_t *data_array, int messageID)
         if (messageID == msgID)
         {
             json_array_remove(data_array, index);
+            json_dump_file(data_array, BASE_PATH, 0);
             return 0;
         }
     }
     return -1;
 }
 
-int read_object(json_t *data_array, int messageID, char *buffer, size_t buffer_size, size_t was_read)
+int read_object(int messageID, char *buffer, size_t buffer_size)
 {
+    if (!json_is_array(data_array))
+        return -2;
+
     if (messageID == 0)
     {
         char *object_in_text = json_dumps(data_array, JSON_COMPACT);
         if (!object_in_text)
             return -1;
-        strncpy(buffer, object_in_text + was_read, buffer_size - 1);
-        int len = strlen(object_in_text + was_read);
+        strncpy(buffer, object_in_text, buffer_size - 1);
+        int len = strlen(object_in_text);
         free(object_in_text);
         return (len < buffer_size ? len : buffer_size);
     }

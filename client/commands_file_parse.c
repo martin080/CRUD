@@ -76,7 +76,14 @@ int check(json_t *commands, struct errors_t *errors)
                     }
                 }
             }
-            else if (!json_is_integer(messageID))
+            else if (json_is_integer(messageID))
+            {
+                int ID = json_integer_value(messageID);
+                json_object_set_new(params, "messageID", json_array());
+                json_t *newMessageID = json_object_get(params, "messageID");
+                json_array_append_new(newMessageID, json_integer(ID));
+            }
+            else 
             {
                 errors->is_errors = 1;
                 errors->command_index = index;
