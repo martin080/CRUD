@@ -1,7 +1,7 @@
 all: client
 
 client: client.o commands_file_parse.o getmac.o
-	gcc client.o commands_file_parse.o -o client -ljansson
+	gcc client.o commands_file_parse.o getmac.o -o client -ljansson
 
 commands_file_parse.o: commands_file_parse.c commands_file_parse.h
 	gcc -c commands_file_parse.c 
