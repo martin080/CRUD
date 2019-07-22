@@ -47,7 +47,7 @@ int handle_create(json_t *request, json_t *response)
         return -2;
 
     json_object_set_new(response, "operation", json_string("create"));
-    json_object_set_new(response, "result", json_object());
+    json_t *result = json_object();
 
     static char response_text[128];
 
@@ -55,14 +55,16 @@ int handle_create(json_t *request, json_t *response)
     {
         snprintf(response_text, 128, "data load failed");
         pack_status(response, -1);
-        pack_message(response, response_text);
+        pack_message(result, response_text);
+        json_object_set(response, "result", result);
         return -1;
     }
     else
     {
         snprintf(response_text, 128, "data was loaded successfuly, new messageID is %d", messageID);
         pack_status(response, 0);
-        pack_message(response, response_text);
+        pack_message(result, response_text);
+        json_object_set(response, "result", result);
         load_id(++messageID);
     }
     return 0;

@@ -30,6 +30,18 @@ int set_nonblock(int fd)
 #endif
 }
 
+int shut_connection(struct pollfd *pfd, int i, int cur_connections)
+{
+    pfd[i].revents = 0;
+    close(pfd[i].fd);
+    for (int j = i; j < cur_connections; j++)
+    {
+        pfd[j].fd = pfd[j + 1].fd;
+        pfd[j].events = pfd[j + 1].events;
+        pfd[j].revents = pfd[j + 1].revents;
+    }
+}
+
 int main()
 {
     fprintf(stdout, "loading database ...\n");
@@ -88,9 +100,6 @@ int main()
 
     freeaddrinfo(res);
 
-    struct sockaddr_storage their_addr;
-    socklen_t slen = sizeof(their_addr);
-
     struct pollfd pfd[MAX_CONNECTIONS + 1];
     pfd[0].fd = sockfd;
     pfd[0].events = POLLIN;
@@ -100,7 +109,7 @@ int main()
 
     while (1)
     {
-        static char buffer[BUFFER_SIZE], response[128];
+        static char buffer[BUFFER_SIZE], buffer_response[BUFFER_SIZE], response[128];
         int ret = poll(pfd, cur_connections + 1, -1);
 
         if (ret == -1)
@@ -109,18 +118,16 @@ int main()
             continue;
         }
 
-        if (pfd[0].revents & POLLIN)
+        if (pfd[0].revents & POLLIN) // it means there are new connections
         {
             int new_fd = 0;
-            while (new_fd != -1) // new connections
+            while (new_fd != -1) // new connections accepting
             {
-                new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &slen);
+                new_fd = accept(sockfd, NULL, NULL);
                 if (new_fd < 0)
                     continue;
 
-                set_nonblock(new_fd);
-
-                if (cur_connections < MAX_CONNECTIONS)
+                if (cur_connections < MAX_CONNECTIONS) // if it's possible to connect
                 {
                     pfd[cur_connections + 1].fd = new_fd;
                     pfd[cur_connections + 1].events = POLLIN | POLLHUP;
@@ -131,30 +138,34 @@ int main()
                     continue;
                 }
 
-                strcpy(response, "server is unable to serve you, please try later\n");
-                send(new_fd, response, strlen(response), 0);
+                set_nonblock(new_fd);
+
+                json_t *response_object = json_object(); // further - packing of response
+                json_t *result = json_object();
+
+                pack_status(response_object, -1);
+                pack_message(result, "server is unable to serve you, please try later");
+
+                json_object_set(response_object, "result", result);
+
+                char *response_in_text = json_dumps(response_object, JSON_COMPACT);
+                send(new_fd, response_in_text, strlen(response_in_text), 0);
+                free(response_in_text);
+
                 close(new_fd);
             }
         }
-        for (int i = 1; i < cur_connections + 1; i++)
+        for (int i = 1; i < cur_connections + 1; i++) //check other connections
         {
-            if (pfd[i].revents & POLLHUP) // shut connection  
+            if (pfd[i].revents & POLLHUP) // shut connection
             {
                 printf("  connection was lost, socket %d\n", pfd[i].fd);
-                pfd[i].revents = 0;
-
-                close(pfd[i].fd);
-                for (int j = i; j < cur_connections; j++)
-                {
-                    pfd[j].fd = pfd[j + 1].fd;
-                    pfd[j].events = pfd[j + 1].events;
-                    pfd[j].revents = pfd[j + 1].revents;
-                }
+                shut_connection(pfd, i, cur_connections);
                 cur_connections--;
                 continue;
             }
 
-            if (!(pfd[i].revents & POLLIN))
+            if (!(pfd[i].revents & POLLIN)) // if there is nothing to read - continue
                 continue;
 
             int new_fd = pfd[i].fd;
@@ -169,41 +180,43 @@ int main()
                 continue;
             }
 
-            if (size == 0 && errno != EAGAIN) //shut connection
+            if (size == 0) //shut connection
             {
                 printf("  connection was lost, socket %d\n", pfd[i].fd);
-                pfd[i].revents = 0;
-
-                close(pfd[i].fd);
-                for (int j = i; j < cur_connections; j++)
-                {
-                    pfd[j].fd = pfd[j + 1].fd;
-                    pfd[j].events = pfd[j + 1].events;
-                    pfd[j].revents = pfd[j + 1].revents;
-                }
+                shut_connection(pfd, i, cur_connections);
                 cur_connections--;
                 continue;
             }
 
-            buffer[size] = '\0';
+            char *separator = strstr(buffer, "\n\n"), *tmp_ptr = buffer; // read data until separator
 
-            printf("  client request: %s \n", buffer);
+            while (separator)
+            {
+                *separator = '\0';
 
-            json_t *response_object = json_object();
+                printf("  client request: %s \n", tmp_ptr);
 
-            printf("  processing request ... \n");
-            handle_request(buffer, response_object); // handle the request
+                json_t *response_object = json_object();
 
-            char *response_in_text = json_dumps(response_object, JSON_COMPACT);
-            printf("  server reponse: %s\n", response_in_text);
+                printf("  processing request ... \n");
 
-            if (send(new_fd, response, strlen(response), 0) == -1)
-                printf("send() on socket %d failed\n", new_fd);
-            free(response_in_text);
+                handle_request(tmp_ptr, response_object); // handle the request
 
-            json_decref(response_object);
+                char *response_in_text = json_dumps(response_object, JSON_COMPACT);
+                printf("  server reponse: %s\n", response_in_text);
 
-            printf("  request was processed \n");
+                snprintf(buffer_response, BUFFER_SIZE, "%s\n\n", response_in_text);
+                if (send(new_fd, buffer_response, strlen(buffer_response), 0) == -1)
+                    printf("send() on socket %d failed\n", new_fd);
+
+                free(response_in_text);
+                json_decref(response_object);
+
+                printf("  request was processed \n");
+
+                tmp_ptr = separator + 2;
+                separator = strstr(tmp_ptr, "\n\n");
+            }
         }
     }
     return 0;

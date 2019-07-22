@@ -5,8 +5,8 @@
 #define BASE_PATH "data.json"
 #define ID_PATH "ID"
 
-json_t *data_array = NULL;
-int messageID = 0;
+json_t *data_array;
+int messageID;
 
 int init_database();
 
