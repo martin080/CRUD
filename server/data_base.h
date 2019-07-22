@@ -2,13 +2,19 @@
 #include <time.h>
 #include <string.h>
 
-int load_database(const char *, json_t *);
+#define BASE_PATH "data.json"
+#define ID_PATH "ID"
 
-int create(json_t *, json_t *, int);
+json_t *data_array;
+int messageID;
 
-int update(json_t *, json_t *, int);
+int init_database();
 
-int delete_object(json_t *, int );
+int create_object(json_t *object);
 
-int read_object(json_t *, int, char *, size_t);
+int update_object(json_t *object, int ID);
+
+int delete_object(int ID);
+
+int read_object( int ID, char *buffer, size_t buffer_size);
 
