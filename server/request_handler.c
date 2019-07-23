@@ -37,6 +37,12 @@ int pack_message(json_t *response, char *message)
     return json_object_set_new(response, "message", json_string(message));
 }
 
+int pack_refuse(char *buffer, size_t buffer_size)
+{
+    int ret = snprintf(buffer, buffer_size, "{\"status\":-1,\"result\":{\"message\":\"server is unable to server you, please try later\"}}\n\n");
+    return ret;
+}
+
 int handle_create(json_t *request, json_t *response)
 {
     if (!json_is_array(data_array))
@@ -287,7 +293,7 @@ int handle_request(char *request, char *buffer, size_t buffer_size)
     }
     snprintf(buffer, buffer_size, "%s\n\n", response_in_text);
     free(response_in_text);
-
+    json_decref(response_object);
 
     return status;
 }
