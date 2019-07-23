@@ -2,13 +2,15 @@
 #include <stdio.h>
 #include "data_base.h"
 
-#define BUFFER_SIZE 2048
+#define BUFFER_SIZE 4096
 
 int init_handler();
 
 int pack_status(json_t *response, int status);
 
 int pack_message(json_t *response, char *message);
+
+int pack_refuse(char *buffer, size_t buffer_size);
 
 int handle_create( json_t *request, json_t *response);
 

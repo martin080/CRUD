@@ -72,7 +72,7 @@ int init_server(char *Port)
 
 int main()
 {
-    fprintf(stdout, "loading database ...\n");
+    fprintf(stdout, "  loading database ...\n");
 
     int init_res = init_database();
 
@@ -87,7 +87,7 @@ int main()
         return 2;
     }
     else
-        printf("data base initialization success\n");
+        printf("  data base initialization success\n");
 
     int sockfd = init_server(PORT); // initialization of server
 
@@ -123,6 +123,8 @@ int main()
 
                 if (cur_connections < MAX_CONNECTIONS) // if it's possible to connect
                 {
+                    set_nonblock(new_fd);
+
                     pfd[cur_connections + 1].fd = new_fd;
                     pfd[cur_connections + 1].events = POLLIN | POLLHUP;
                     cur_connections++;
@@ -132,19 +134,8 @@ int main()
                     continue;
                 }
 
-                set_nonblock(new_fd);
-
-                json_t *response_object = json_object(); // further - packing of response
-                json_t *result = json_object();
-
-                pack_status(response_object, -1);
-                pack_message(result, "server is unable to serve you, please try later");
-
-                json_object_set(response_object, "result", result);
-
-                char *response_in_text = json_dumps(response_object, JSON_COMPACT);
-                send(new_fd, response_in_text, strlen(response_in_text), 0);
-                free(response_in_text);
+                pack_refuse(buffer, BUFFER_SIZE);
+                send(new_fd, buffer, strlen(buffer), 0);
 
                 close(new_fd);
             }
@@ -180,7 +171,7 @@ int main()
                 shut_connection(pfd, i, cur_connections);
                 cur_connections--;
                 continue;
-            }
+            }   
 
             char *separator = strstr(buffer, "\n\n"), *tmp_ptr = buffer; // read data until separator
 
@@ -194,7 +185,7 @@ int main()
 
                 handle_request(tmp_ptr, buffer_response, BUFFER_SIZE); // handle the request
                 printf("  server reponse: %s\n", buffer_response);
- 
+
                 if (send(new_fd, buffer_response, strlen(buffer_response), 0) == -1)
                     printf("send() on socket %d failed\n", new_fd);
                 printf("  request was processed \n");
