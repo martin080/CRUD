@@ -1,0 +1,27 @@
+Requset unit format: 
+{
+	"command" : cmd,
+	"params":
+	{
+		////
+	}
+}
+
+Where cmd = "create" | "read" | "update" | "delete". 
+
+for read/delete/update field "messageID" is neccessary.
+
+"send FILENAME" - to send instruction file(FILENAME). FILENAME must be json
+array with elements of strict format described above.
+
+"changeout FILENAME" - to change output path (FILENAME == "stdout" - change to 
+standart output).
+
+"dump FILENAME" - dump last responses to file FILENAME (or extern if in FILENAMEjson array).
+
+"exit" - to exit from app.
+
+To read/delete several units of data, specify its messageID in array like that: 
+"messageID":[12,113,34]
+To read all data you must specify messageID equal to 0.
+
