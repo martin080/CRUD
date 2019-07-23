@@ -1,21 +1,4 @@
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <sys/poll.h>
-
-#include <fcntl.h>
-
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
-
-#include <errno.h>
-#include "request_handler.h"
-
-#define PORT "3490"
-#define MAX_CONNECTIONS 10
-#define BUFFER_SIZE 2048
+#include "server.h"
 
 int set_nonblock(int fd)
 {
@@ -42,24 +25,8 @@ int shut_connection(struct pollfd *pfd, int i, int cur_connections)
     }
 }
 
-int main()
+int init_server(char *Port)
 {
-    fprintf(stdout, "loading database ...\n");
-
-    int init_res = init_database();
-    if (init_res == -1)
-    {
-        fprintf(stderr, "data base load failed\n");
-        return 1;
-    }
-    else if (init_res == -2)
-    {
-        fprintf(stderr, "ID init failed\n");
-        return 2;
-    }
-    else
-        printf("data base init success\n");
-
     int sockfd;
     struct addrinfo hints, *res;
 
@@ -68,18 +35,18 @@ int main()
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE;
 
-    int status = getaddrinfo(NULL, PORT, &hints, &res);
+    int status = getaddrinfo(NULL, Port, &hints, &res);
     if (status == -1)
     {
         fprintf(stderr, "getaddrinfo failed: %s\n", gai_strerror(status));
-        exit(0);
+        return -1;
     };
 
     sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
     if (sockfd == -1)
     {
         fprintf(stderr, "socket failed.\n");
-        exit(1);
+        return -2;
     }
     set_nonblock(sockfd);
 
@@ -89,18 +56,45 @@ int main()
     if (bind(sockfd, res->ai_addr, res->ai_addrlen) == -1)
     {
         fprintf(stderr, "bind failed: %s\n", strerror(errno));
-        exit(2);
+        return -3;
     }
 
     if (listen(sockfd, SOMAXCONN) == -1)
     {
         fprintf(stderr, "listen failed.\n");
-        exit(3);
+        return -4;
     }
 
     freeaddrinfo(res);
 
-    struct pollfd pfd[MAX_CONNECTIONS + 1];
+    return sockfd;
+}
+
+int main()
+{
+    fprintf(stdout, "loading database ...\n");
+
+    int init_res = init_database();
+
+    if (init_res == -1)
+    {
+        fprintf(stderr, "data base load failed\n");
+        return 1;
+    }
+    else if (init_res == -2)
+    {
+        fprintf(stderr, "ID initialization failed\n");
+        return 2;
+    }
+    else
+        printf("data base initialization success\n");
+
+    int sockfd = init_server(PORT); // initialization of server
+
+    if (sockfd < 0)
+        return 1;
+
+    struct pollfd pfd[MAX_CONNECTIONS + 1]; //pollfd initialization
     pfd[0].fd = sockfd;
     pfd[0].events = POLLIN;
     for (int i = 1; i < MAX_CONNECTIONS + 1; i++)
@@ -112,7 +106,7 @@ int main()
         static char buffer[BUFFER_SIZE], buffer_response[BUFFER_SIZE], response[128];
         int ret = poll(pfd, cur_connections + 1, -1);
 
-        if (ret == -1)
+        if (ret == -1) // poll failed
         {
             fprintf(stderr, "poll failed\n");
             continue;
@@ -165,7 +159,7 @@ int main()
                 continue;
             }
 
-            if (!(pfd[i].revents & POLLIN)) // if there is nothing to read - continue
+            if (!(pfd[i].revents & POLLIN)) // if there is no event - continue
                 continue;
 
             int new_fd = pfd[i].fd;
@@ -174,7 +168,7 @@ int main()
             printf("  reading from socket %d ... \n", new_fd);
 
             int size = recv(new_fd, buffer, sizeof(buffer), MSG_NOSIGNAL);
-            if (size == -1)
+            if (size == -1) // error recv()
             {
                 printf("recv() on socket %d failed\n", new_fd);
                 continue;
@@ -196,25 +190,16 @@ int main()
 
                 printf("  client request: %s \n", tmp_ptr);
 
-                json_t *response_object = json_object();
+                printf("  processing the request ... \n");
 
-                printf("  processing request ... \n");
-
-                handle_request(tmp_ptr, response_object); // handle the request
-
-                char *response_in_text = json_dumps(response_object, JSON_COMPACT);
-                printf("  server reponse: %s\n", response_in_text);
-
-                snprintf(buffer_response, BUFFER_SIZE, "%s\n\n", response_in_text);
+                handle_request(tmp_ptr, buffer_response, BUFFER_SIZE); // handle the request
+                printf("  server reponse: %s\n", buffer_response);
+ 
                 if (send(new_fd, buffer_response, strlen(buffer_response), 0) == -1)
                     printf("send() on socket %d failed\n", new_fd);
-
-                free(response_in_text);
-                json_decref(response_object);
-
                 printf("  request was processed \n");
 
-                tmp_ptr = separator + 2;
+                tmp_ptr = separator + 2; // to the next request
                 separator = strstr(tmp_ptr, "\n\n");
             }
         }
