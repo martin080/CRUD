@@ -97,12 +97,15 @@ int delete_object(int messageID)
     return -1;
 }
 
-int read_object(int messageID, char *buffer, size_t buffer_size)
+int read_object(int search_ID, char *buffer, size_t buffer_size)
 {
     if (!json_is_array(data_array))
         return -2;
 
-    if (messageID == 0)
+    if (search_ID > messageID)
+        return -3;
+
+    if (search_ID == 0)
     {
         char *object_in_text = json_dumps(data_array, JSON_COMPACT);
         if (!object_in_text)
@@ -126,7 +129,7 @@ int read_object(int messageID, char *buffer, size_t buffer_size)
 
         int msgID = json_integer_value(messageID_);
 
-        if (msgID == messageID)
+        if (msgID == search_ID)
         {
             char *object_in_text = json_dumps(value, JSON_COMPACT);
             if (!object_in_text)

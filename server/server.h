@@ -15,7 +15,7 @@
 
 #define PORT "3490"
 #define MAX_CONNECTIONS 10
-#define BUFFER_SIZE 4096
+//BUFFER_SIZE defined in "request_handler.h"
 
 int set_nonblock(int fd);
 

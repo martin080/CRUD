@@ -72,7 +72,7 @@ int init_server(char *Port)
 
 int main()
 {
-    fprintf(stdout, "loading database ...\n");
+    fprintf(stdout, "  loading database ...\n");
 
     int init_res = init_database();
 
@@ -87,7 +87,7 @@ int main()
         return 2;
     }
     else
-        printf("data base initialization success\n");
+        printf("  data base initialization success\n");
 
     int sockfd = init_server(PORT); // initialization of server
 

@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include "data_base.h"
 
-#define BUFFER_SIZE 2048
+#define BUFFER_SIZE 4096
 
 int init_handler();
 
