@@ -1,6 +1,5 @@
 #include "request_handler.h"
 
-
 int load_id(int ID)
 {
     FILE *id_file = fopen("ID", "r+");
@@ -114,8 +113,9 @@ int handle_read(json_t *params, json_t *response)
 
         int ID = json_integer_value(value);
         ssize_t size = read_object(ID, buffer, BUFFER_SIZE - 1);
-        if (size == -1)
+        if (size < 0)
         {
+            pack_status(response, -1);
             json_array_append_new(fail, value);
             continue;
         };
@@ -240,16 +240,15 @@ int handle_delete(json_t *request, json_t *response)
     return 0;
 }
 
-int handle_request(char *buffer, json_t *response_object)
+int handle_request(char *request, char *buffer, size_t buffer_size)
 {
-    if (!json_is_object(response_object))
-        return -2;
+    json_t *response_object = json_object();
 
     pack_status(response_object, 0);
     json_t *result = json_object();
-    
+
     json_error_t error;
-    json_t *object = json_loads(buffer, 0, &error);
+    json_t *object = json_loads(request, 0, &error);
     if (!object)
     {
         pack_status(response_object, -1);
@@ -264,7 +263,7 @@ int handle_request(char *buffer, json_t *response_object)
     int status;
 
     if (!strcmp(command_text, "create")) // command == create
-        status = handle_create(params, response_object); 
+        status = handle_create(params, response_object);
     else if (!strcmp(command_text, "read")) //command == read
         status = handle_read(params, response_object);
     else if (!strcmp(command_text, "update")) // command == update
@@ -274,6 +273,21 @@ int handle_request(char *buffer, json_t *response_object)
 
     json_decref(command);
     json_decref(params);
-    
+
+    char *response_in_text = json_dumps(response_object, JSON_COMPACT);
+    if (response_in_text == NULL) // if json_dumps() failed, fill the response_object
+    {
+        json_decref(response_object);
+        response_object = json_object();
+        pack_status(response_object, -1);
+        json_t *result = json_object();
+        pack_message(result, "failed dump json data\n");
+        json_object_set(response_object, "result", result);
+        response_in_text = json_dumps(response_object, JSON_COMPACT);
+    }
+    snprintf(buffer, buffer_size, "%s\n\n", response_in_text);
+    free(response_in_text);
+
+
     return status;
 }
