@@ -65,7 +65,13 @@ int process_command(int sockfd)
         
         json_array_extend(out_array, new_array);
 
-        return json_dump_file(out_array, buf_argument, 0);
+        int ret = json_dump_file(out_array, buf_argument, 0);
+        if (ret == 0)
+            printf(">data was dumped successfully\n");
+        else
+            fprintf(stderr, ">data dump failed\n");
+            
+        return ret;
     }
     else if (!strcmp(buf_command, "exit"))
     {

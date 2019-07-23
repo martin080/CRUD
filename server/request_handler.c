@@ -122,7 +122,7 @@ int handle_read(json_t *params, json_t *response)
         if (size < 0)
         {
             pack_status(response, -1);
-            json_array_append_new(fail, value);
+            json_array_append_new(fail, json_integer(ID));
             continue;
         };
 
