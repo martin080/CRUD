@@ -102,7 +102,7 @@ int read_object(int search_ID, char *buffer, size_t buffer_size)
     if (!json_is_array(data_array))
         return -2;
 
-    if (search_ID > messageID)
+    if (search_ID > messageID || search_ID < 0)
         return -3;
 
     if (search_ID == 0)
