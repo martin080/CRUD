@@ -14,9 +14,14 @@ struct errors_t
     short int there_is_no_deviceid;
     short int messageid_is_not_integer;
     short int deviceid_is_not_a_string;
+    short int unnecessary_parameters;
+    short int wrong_parameters;
 };
 
+int check_template_object(json_t *);
 
-int check(json_t *, struct errors_t *);
+int check_template(json_t *, struct errors_t *);
+
+int check_commands(json_t *, struct errors_t *);
 
 void printf_error(struct errors_t *);

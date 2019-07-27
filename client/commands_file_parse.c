@@ -1,7 +1,7 @@
 #include "commands_file_parse.h"
 #include "getmac.h"
 
-int check(json_t *commands, struct errors_t *errors)
+int check_commands(json_t *commands, struct errors_t *errors)
 {
     if (!json_is_array(commands))
     {
@@ -57,7 +57,7 @@ int check(json_t *commands, struct errors_t *errors)
             return -1;
         }
         const char *command_value = json_string_value(command);
-        
+
         if (!strcmp(command_value, "read") || !strcmp(command_value, "delete"))
         {
             json_t *messageID = json_object_get(params, "messageID");
@@ -83,7 +83,7 @@ int check(json_t *commands, struct errors_t *errors)
                 json_t *newMessageID = json_object_get(params, "messageID");
                 json_array_append_new(newMessageID, json_integer(ID));
             }
-            else 
+            else
             {
                 errors->is_errors = 1;
                 errors->command_index = index;
@@ -119,6 +119,90 @@ int check(json_t *commands, struct errors_t *errors)
 
     errors->is_errors = 0;
     return 0;
+}
+
+int check_template_object(json_t *obj)
+{
+    json_t *value;
+    const char *key;
+    json_object_foreach(obj, key, value)
+    {
+        if (json_is_object(value))
+        {
+            check_template_object(value);
+            continue;
+        }
+
+        if (!json_is_string(value))
+        {
+            return -1;
+        }
+
+        const char *value_ptr = json_string_value(value);
+
+        if (!strcmp(value_ptr, "string") || !strcmp(value_ptr, "number"))
+        {
+            return -2;
+        }
+    }
+
+    return 0;
+}
+
+int check_template(json_t *template, struct errors_t *err)
+{
+    if (!json_is_object(template))
+    {
+        err->is_errors = 1;
+        err->is_not_object = 1;
+        return -1;
+    }
+
+    json_t *command = json_object_get(template, "command");
+
+    if (!command)
+    {
+        err->is_errors = 1;
+        err->there_is_no_command = 1;
+        return -1;
+    }
+
+    if (!json_is_string(command))
+    {
+        err->is_errors = 1;
+        err->command_is_not_string = 1;
+        return -1;
+    }
+
+    if (strcmp(json_string_value(command), "create"))
+    {
+        err->is_errors = 1;
+        err->wrong_command = 1;
+        return -1;
+    }
+
+    json_t *params = json_object_get(template, "params");
+
+    if (!json_is_object(params))
+    {
+        err->is_errors = 1;
+        err->there_is_no_params = 1;
+        return -1;
+    }
+
+    if (json_object_size(template) > 2)
+    {
+        err->is_errors = 1;
+        err->unnecessary_parameters = 1;
+        return -1;
+    }
+
+    if (!check_template_object(params))
+    {
+        err->is_errors = 1;
+        err->wrong_parameters = 1;
+        return -1;
+    }
 }
 
 void printf_error(struct errors_t *errors)
