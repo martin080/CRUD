@@ -270,6 +270,8 @@ int template_fill_object(json_t *obj, char *arguments) // при вхожден�
             json_t *number_value = json_integer(num);
             json_decref(value);
             value = number_value;
+
+            ptr = strchr(ptr + 1, ' ');
         }
         else
         {
