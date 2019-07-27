@@ -235,7 +235,8 @@ int template_fill_object(json_t *obj, char *arguments) // при вхожден�
     {
         if (json_is_object(value))
         {
-            template_fill_object(value, ptr);
+            if (template_fill_object(value, ptr) < 0)
+                return -1;
             continue;
         }
         
