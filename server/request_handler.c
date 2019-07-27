@@ -276,6 +276,14 @@ int handle_request(char *request, char *buffer, size_t buffer_size)
         status = handle_update(params, response_object);
     else if (!strcmp(command_text, "delete")) // command == delete
         status = handle_delete(params, response_object);
+    else // wrong command
+    {
+        pack_status(response_object, -1);
+        json_t *result = json_object();
+        json_object_set_new(result, "message", json_string("wrong command"));
+        json_object_set(response_object, "result", result);
+        json_decref(result);
+    }
 
     json_decref(command);
     json_decref(params);

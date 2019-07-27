@@ -112,14 +112,14 @@ int main(int argc, char *argv[])
                 return -1;
         }
 
-        if (pfd[1].revents & POLLHUP)
+        if (pfd[1].revents & POLLHUP) // shut connection
         {
             printf(">connection lost\n");
             close(sockfd);
             return 6;
         }
 
-        if (pfd[1].revents & POLLIN)
+        if (pfd[1].revents & POLLIN) // server sent data
         {
             pfd[1].revents = 0;
 
