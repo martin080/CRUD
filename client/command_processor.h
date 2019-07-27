@@ -11,7 +11,7 @@ int send_command(int sockfd, json_t *);
 
 int send_request(int sockfd, char *path);
 
-int pack_read(json_t *cmd, char *buffer);
+int pack_read_delete (json_t *cmd, char *buffer, char *command_string);
 
 int dump(char *path);
 

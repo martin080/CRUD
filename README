@@ -25,3 +25,6 @@ To read/delete several units of data, specify its messageID in array like that:
 "messageID":[12,113,34]
 To read all data you must specify messageID equal to 0.
 
+Also interactive method is available.
+Print "read/delete ID1 ID2 ..." to do corresponding operation
+

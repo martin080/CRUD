@@ -86,12 +86,12 @@ int dump(char *path)
     return ret;
 }
 
-int pack_read(json_t *command, char *buffer)
+int pack_read_delete(json_t *command, char *buffer, char *command_string)
 {
     if (!json_is_object(command))
         return -1;
 
-    json_object_set_new(command, "command", json_string("read"));
+    json_object_set_new(command, "command", json_string(command_string));
 
     json_t *params = json_object();
     json_t *messageIDs = json_array();
@@ -154,7 +154,7 @@ int process_command(int sockfd)
         fflush(stdin);
         return -3;
     }
-    else if (!strcmp(buf_command, "read"))
+    else if (!strcmp(buf_command, "read") || !strcmp(buf_command, "delete"))
     {
         gets(buf_argument, 64);
         char *ptr = buf_argument;
@@ -163,7 +163,7 @@ int process_command(int sockfd)
             ptr++;
 
         json_t *cmd = json_object();
-        int ret = pack_read(cmd, ptr);
+        int ret = pack_read_delete(cmd, ptr, buf_command);
 
         if (ret < 0)
             return ret;
