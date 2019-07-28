@@ -196,7 +196,7 @@ int create_template(char *path, char *name)
 
         if (!strcmp(name, template_name_string))
         {
-            fprintf(stderr, "name \"%s\" is already taken\n", name);
+            fprintf(stderr, ">name \"%s\" is already taken\n", name);
             return -1;
         }
     }
@@ -323,8 +323,6 @@ int template_fill(json_t *obj, char *name, char **argumets)
     json_t *params = json_object_get(obj, "params");
 
     int ret = template_fill_object(params, argumets);
-
-    print_object(obj);
 
     return ret;
 }
