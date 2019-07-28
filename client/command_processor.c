@@ -6,6 +6,7 @@ int command_processor_init()
 
     if (calls = 0)
         json_decref(templates);
+
     templates = json_load_file(TEMPLATES_PATH, 0, 0);
 
     if (!templates)
@@ -15,24 +16,6 @@ int command_processor_init()
     }
     calls++;
     return 0;
-}
-
-char *gets(char *s, int buffer_size)
-{
-    fflush(stdin);
-    int i, k = getchar();
-    if (k == EOF)
-        return NULL;
-    for (i = 0; k != EOF && k != '\n' && i < buffer_size; ++i)
-    {
-        s[i] = k;
-        k = getchar();
-        if (k == EOF && !feof(stdin))
-            return NULL;
-    }
-    s[i] = '\0';
-
-    return s;
 }
 
 int send_command(int sockfd, json_t *cmd)
@@ -198,6 +181,26 @@ int create_template(char *path, char *name)
         return -1;
     }
 
+    json_t *value;
+    size_t index;
+    json_array_foreach(templates, index, value)
+    {
+        json_t *template_name = json_object_get(value, "name");
+        if (!json_is_string(template_name))
+        {
+            fprintf(stderr, ">unknow error with template\n");
+            return -1;
+        }
+
+        const char *template_name_string = json_string_value(template_name);
+
+        if (!strcmp(name, template_name_string))
+        {
+            fprintf(stderr, "name \"%s\" is already taken\n", name);
+            return -1;
+        }
+    }
+
     json_error_t error;
     json_t *template = json_load_file(path, 0, &error);
     if (!template)
@@ -223,26 +226,30 @@ int create_template(char *path, char *name)
     return json_dump_file(templates, TEMPLATES_PATH, 0);
 }
 
-int template_fill_object(json_t *obj, char *arguments) // при вхождении в рекурсию все ломается из-за указателя (он не перемещается)
+int template_fill_object(json_t *obj, char **arguments)
 {
-    char *ptr = arguments;
+    if (!json_is_object(obj))
+        return -5;
+
+    char *ptr = *arguments;
 
     while ((*ptr == ' ' || *ptr == '\t') && *ptr != '\0')
         ptr++;
 
-    json_t *value;const char *key;
+    json_t *value;
+    const char *key;
     json_object_foreach(obj, key, value)
     {
         if (json_is_object(value))
         {
-            if (template_fill_object(value, ptr) < 0)
+            if (template_fill_object(value, &ptr) < 0)
                 return -1;
             continue;
         }
-        
+
         if (!json_is_string(value))
             return -1;
-        
+
         const char *content = json_string_value(value);
 
         if (!strcmp(content, "string"))
@@ -250,16 +257,20 @@ int template_fill_object(json_t *obj, char *arguments) // при вхожден�
             char *string_start, *string_end;
             string_start = strchr(ptr, '"');
 
-            if (!string_start) 
+            if (!string_start)
                 return -2;
-            
+
             string_end = strchr(string_start + 1, '"');
+
+            if (!string_end)
+                return -2;
 
             *string_end = '\0';
 
             json_string_set(value, string_start + 1);
 
             ptr = string_end + 1;
+            *arguments = ptr;
         }
         else if (!strcmp(content, "number"))
         {
@@ -267,25 +278,24 @@ int template_fill_object(json_t *obj, char *arguments) // при вхожден�
 
             if (num == 0 && *ptr != '0')
                 return -3;
-            
+
             json_t *number_value = json_integer(num);
             json_decref(value);
             value = number_value;
 
             ptr = strchr(ptr + 1, ' ');
+            *arguments = ptr;
         }
         else
         {
             return -4;
         }
-        
     }
 
     return 0;
-
 }
 
-int template_fill(json_t *obj, char *name, char *argumets)
+int template_fill(json_t *obj, char *name, char **argumets)
 {
     obj = NULL;
     json_t *value;
@@ -310,7 +320,13 @@ int template_fill(json_t *obj, char *name, char *argumets)
     if (obj == NULL)
         return -1;
 
-    return template_fill_object(obj, argumets);
+    json_t *params = json_object_get(obj, "params");
+
+    int ret = template_fill_object(params, argumets);
+
+    print_object(obj);
+
+    return ret;
 }
 
 int process_command(int sockfd)
@@ -346,7 +362,7 @@ int process_command(int sockfd)
     }
     else if (!strcmp(buf_command, "read") || !strcmp(buf_command, "delete"))
     {
-        gets(buf_argument, 128);
+        fgets(buf_argument, 128, stdin);
         char *ptr = buf_argument;
 
         while ((*ptr == ' ' || *ptr == '\t') && *ptr != '\0')
@@ -366,7 +382,7 @@ int process_command(int sockfd)
     }
     else if (!strcmp(buf_command, "create_template"))
     {
-        gets(buf_argument, 127);
+        fgets(buf_argument, 127, stdin);
         char path[32], name[32];
         sscanf(buf_argument, "%s %s", path, name);
 
@@ -381,14 +397,15 @@ int process_command(int sockfd)
     {
         char name[32];
         sscanf(buf_command, "create_%s", name);
-        gets(buf_argument, 127);
+        fgets(buf_argument, 127, stdin);
 
+        char *ptr = buf_argument;
         json_t *request;
 
-        if (template_fill(request, name, buf_argument) < 0)
+        if (template_fill(request, name, &ptr) < 0)
         {
             fprintf(stderr, ">fill of template failed\n");
-            return -1; 
+            return -1;
         }
 
         if (send_command(sockfd, request) < 0)

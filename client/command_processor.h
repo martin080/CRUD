@@ -6,7 +6,6 @@
 #include <unistd.h>
 
 
-char *gets(char *buffer, int buffer_size);
 
 int command_processor_init();
 
