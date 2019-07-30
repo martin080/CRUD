@@ -96,7 +96,7 @@ int main()
     if (sockfd < 0)
         return 1;
 
-    struct pollfd pfd[MAX_CONNECTIONS + 1]; //pollfd initialization
+    struct pollfd pfd[MAX_CONNECTIONS + 1]; //pollfd initialization (to change max count of connections change MAC_CONNECTIONS server.h)
     pfd[0].fd = sockfd;
     pfd[0].events = POLLIN;
     for (int i = 1; i < MAX_CONNECTIONS + 1; i++)

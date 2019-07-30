@@ -62,6 +62,17 @@ char *str_tok(char *buffer)
     return ptr;
 }
 
+int only_numbers(const char *str)
+{
+    char *ptr = str;
+
+    for ( ; *ptr; ptr++)
+        if (*ptr < '0' || *ptr > '9')
+            return 0;
+
+    return 1;
+}
+
 int command_processor_init()
 {
     static int calls = 0;
@@ -112,11 +123,8 @@ int send_request(int sockfd, char *path)
         return -1;
     }
 
-    struct errors_t errors;
-    memset(&errors, 0, sizeof(errors));
-    if (check_commands(commands, &errors) == -1)
+    if (check_commands(commands) == -1)
     {
-        printf_error(&errors);
         json_decref(commands);
         return -2;
     }
@@ -128,6 +136,8 @@ int send_request(int sockfd, char *path)
         if (send_command(sockfd, value) == -1)
             fprintf(stderr, ">send() failed\n");
     }
+
+    return 0;
 }
 
 int changeoutf(char *file_path)
@@ -151,7 +161,9 @@ int changeoutf(char *file_path)
         int answ;
         scanf("%d", &answ);
         if (answ == 1)
+        {
             fd = open(file_path, O_RDWR | O_TRUNC, S_IRUSR | S_IWUSR);
+        }
         else
         {
             fd = open(file_path, O_RDWR);
@@ -173,8 +185,15 @@ int changeoutf(char *file_path)
             return -1;
         }
 
+        if (answ == 1)
+            write(fd, "[]", 2);
+
         int flags = fcntl(fd, F_GETFL, 0);
         fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    }
+    else
+    {
+        write(fd, "[]", 2);
     }
 
     printf(">out path was changed successully\n");
@@ -253,13 +272,12 @@ int pack_read_delete(json_t *command, char *token, char *command_string)
         if (token == NULL)
             break;
 
-        int n = atoi(token);
-
-        if (n == 0 && *token != 0)
+        if (!only_numbers(token))
         {
             fprintf(stderr, ">wrong input: \"%s\"\n", token);
             return -2;
         }
+        int n = atoi(token);
 
         json_array_append_new(messageIDs, json_integer(n));
 
@@ -272,11 +290,32 @@ int pack_read_delete(json_t *command, char *token, char *command_string)
     return 0;
 }
 
+int pack_delete_repo(json_t *request, char *name)
+{
+    if (!json_is_object(request))
+        return -1;
+
+    json_object_set_new(request, "command", json_string("delete_repo"));
+
+    json_t *params = json_object();
+    json_object_set_new(params, "name", json_string(name));
+
+    json_object_set(request, "params", params);
+
+    return 0;
+}
+
 int create_template(char *path, char *name)
 {
     if (!templates)
     {
-        fprintf(stderr, ">varibale \"templates\" aren't initialized\n");
+        fprintf(stderr, ">varibale \"templates\" isn't initialized\n");
+        return -1;
+    }
+
+    if (!strcmp(name, "template"))
+    {
+        fprintf(stderr, "name \"template\" is unacceptable\n");
         return -1;
     }
 
@@ -308,11 +347,9 @@ int create_template(char *path, char *name)
         return -2;
     }
 
-    struct errors_t errors;
-    memset(&errors, 0, sizeof(errors));
-    if (check_template(template, &errors) == -1)
+    
+    if (check_template(template) == -1)
     {
-        printf_error(&errors);
         json_decref(template);
         return -3;
     }
@@ -325,7 +362,7 @@ int create_template(char *path, char *name)
     return json_dump_file(templates, TEMPLATES_PATH, 0);
 }
 
-int template_fill_object(json_t *obj, char *arguments) // in process
+int template_fill_object(json_t *obj, char *arguments)  // argumtents - string splitted on tokens
 {
     if (!json_is_object(obj))
         return -5;
@@ -359,11 +396,18 @@ int template_fill_object(json_t *obj, char *arguments) // in process
 
         if (json_is_string(value))
         {
+            const char *val = json_string_value(value);
+            if (strcmp(val, "")) // field if filled
+                continue;
             json_string_set(value, ptr);
             ptr = str_tok(NULL);
         }
         else if (json_is_integer(value))
         {
+            int val = json_integer_value(value);
+            if (val != 0) // it means field is filled
+                continue;
+
             int num = atoi(ptr); // пока что только int
 
             if (num == 0 && *ptr != '0')
@@ -381,24 +425,20 @@ int template_fill_object(json_t *obj, char *arguments) // in process
     return 0;
 }
 
-int template_fill(json_t **obj, char *name, char *argumets) // in process
+int template_fill(json_t **obj, char *name, char *argumets) 
 {
-    argumets = str_tok(argumets);
-
-    if (argumets == NULL)
-    {
-        fprintf(stderr, "tokenization failed\n");
-        return -1;
-    }
-
     *obj = NULL;
     json_t *value;
     size_t index;
+    int is_found = 0;
     json_array_foreach(templates, index, value)
     {
         json_t *template_name = json_object_get(value, "name");
         if (!json_is_string(template_name))
+        {
+            fprintf(stderr, ">undefined error\n");
             return -1;
+        }
 
         const char *t_ptr = json_string_value(template_name);
 
@@ -406,14 +446,24 @@ int template_fill(json_t **obj, char *name, char *argumets) // in process
         {
             *obj = json_object_get(value, "template");
             if (*obj == NULL)
+            {
+                fprintf(stderr, ">undefined error\n");
                 return -1;
+            }
+            is_found = 1;
             break;
         }
     }
 
-    if (*obj == NULL)
+    if (!is_found)
     {
-        printf(">template with name \"%s\" not found", name);
+        printf(">template with name \"%s\" not found\n", name);
+        return -1;
+    }
+
+    if (argumets == NULL)
+    {
+        fprintf(stderr, ">tokenization failed\n");
         return -1;
     }
 
@@ -434,44 +484,113 @@ int template_fill(json_t **obj, char *name, char *argumets) // in process
     return ret;
 }
 
+int show_template(char *name)
+{
+    json_t *value;
+    size_t index;
+
+    short int all = 0;
+    if (!strcmp(name, "--all"))
+        all = 1;
+
+    json_array_foreach(templates, index, value)
+    {
+        json_t *template_name = json_object_get(value, "name");
+        if (!json_is_string(template_name))
+        {
+            fprintf(stderr, ">undefined error\n");
+            return -1;
+        }
+
+        const char *t_ptr = json_string_value(template_name);
+
+        if (all || !strcmp(t_ptr, name))
+        {
+            json_t *obj = json_object_get(value, "template");
+            if (obj == NULL)
+            {
+                fprintf(stderr, ">undefined error\n");
+                return -1;
+            }
+
+            char *template_text = json_dumps(obj, JSON_INDENT(1));
+            printf("template \"%s\":\n%s\n", t_ptr, template_text);
+            free(template_text);
+
+            if (!all)
+                return 0;
+        }
+    }
+
+    if (!all)
+    {
+        printf(">template with name \"%s\" not found\n", name);
+        return 0;
+    }
+
+    return -1;
+}
+
 int process_command(int sockfd)
 {
-    static char buf_command[64], buf_argument[128];
+    static char command[512];
+    char *buf_command, *buf_argument;
 
-    scanf("%s", buf_command);
+    fgets(command, 512, stdin);
+    fflush(stdin);
+
+    buf_command = str_tok(command);
+
+    if (!buf_command)
+    {
+        fprintf(stderr, ">enter the command\n");
+        return -1;
+    }
+
+    if (!strcmp(buf_command, "exit"))
+    {
+        close(sockfd);
+        return -3;
+    }
+
+    buf_argument = str_tok(NULL);
 
     if (!strcmp(buf_command, "send"))
     {
-        scanf("%s", buf_argument);
-        fflush(stdin);
+        if (!buf_argument)
+        {
+            fprintf(stderr, ">missing arguments: COMMANDS_FILE_PATH\n");
+            return -1;
+        }
         return send_request(sockfd, buf_argument);
     }
     else if (!strcmp(buf_command, "changeout"))
     {
-        scanf("%s", buf_argument);
-        fflush(stdin);
+        if (!buf_argument)
+        {
+            fprintf(stderr, ">missing argumets: OUT_FILE_PATH\n");
+            return -1;
+        }
         return changeoutf(buf_argument);
     }
     else if (!strcmp(buf_command, "dump"))
     {
-        scanf("%s", buf_argument);
-        fflush(stdin);
+        if (!buf_argument)
+        {
+            fprintf(stderr, ">missing argumets: OUT_FILE_PATH\n");
+            return -1;
+        }
 
         return dump(buf_argument);
     }
-    else if (!strcmp(buf_command, "exit"))
-    {
-        close(sockfd);
-        fflush(stdin);
-        return -3;
-    }
     else if (!strcmp(buf_command, "read") || !strcmp(buf_command, "delete"))
     {
-        fgets(buf_argument, 128, stdin);
-        fflush(stdin);
+        if (!buf_argument)
+        {
+            fprintf(stderr, ">missing argumets: ID\n");
+            return -1;
+        }
         char *ptr = buf_argument;
-
-        ptr = str_tok(ptr);
 
         json_t *cmd = json_object();
         int ret = pack_read_delete(cmd, ptr, buf_command);
@@ -487,23 +606,43 @@ int process_command(int sockfd)
     }
     else if (!strcmp(buf_command, "create_template"))
     {
-        fgets(buf_argument, 127, stdin);
-        char path[32], name[32];
-        sscanf(buf_argument, "%s %s", path, name);
+        char *path, *name;
+        if (buf_argument)
+        {
+            path = buf_argument;
+            buf_argument = str_tok(NULL);
+
+            if (buf_argument)
+                name = buf_argument;
+            else
+            {
+                fprintf(stderr, ">wrong usage: create_template PATH TEMPLATE_NAME\n");
+                return -1;
+            }
+        }
+        else
+        {
+            fprintf(stderr, ">wrong usage: create_template PATH TEMPLATE_NAME\n");
+            return -1;
+        }
 
         int ret = create_template(path, name);
 
         if (ret < 0)
             return -1;
 
-        printf(">template was created");
+        printf(">template was created\n");
     }
-    else if (strstr(buf_command, "create_"))
+    else if (strstr(buf_command, "use_"))
     {
         char name[32];
-        sscanf(buf_command, "create_%s", name);
-        fgets(buf_argument, 127, stdin);
-        fflush(stdin);
+        sscanf(buf_command, "use_%s", name);
+
+        if (!buf_argument)
+        {
+            fprintf(stderr, ">missing argumets: ARGS\n");
+            return -1;
+        }
 
         char *ptr = buf_argument;
 
@@ -511,7 +650,6 @@ int process_command(int sockfd)
 
         if (template_fill(&request, name, ptr) < 0)
         {
-            fprintf(stderr, ">fill of template failed\n");
             command_processor_init();
             return -1;
         }
@@ -525,10 +663,37 @@ int process_command(int sockfd)
 
         command_processor_init();
     }
+    else if (!strcmp(buf_command, "delete_repo"))
+    {
+        if (!buf_argument)
+        {
+            fprintf(stderr, ">missing argumets: REPO_NAME");
+            return -1;
+        }
+
+        json_t *request = json_object();
+        if (pack_delete_repo(request, buf_argument) < 0)
+            return -1;
+
+        if (send_command(sockfd, request) < 0)
+        {
+            fprintf(stderr, ">send() failed\n");
+            return -1;
+        }
+    }
+    else if (!strcmp(buf_command, "show_template"))
+    {
+        if (!buf_argument)
+        {
+            fprintf(stderr, ">missing argumets: TEMPLATE_NAME\n");
+            return -1;
+        }
+
+        return show_template(buf_argument);
+    }
     else
     {
         printf(">undefined command");
-        fflush(stdin);
         return -1;
     }
 }

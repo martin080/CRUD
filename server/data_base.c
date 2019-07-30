@@ -47,7 +47,7 @@ int dump_database()
     return json_dump_file(database, name_with_extention, 0);
 }
 
-int create_repo(char *name)
+int create_repo(const char *name)
 {
     static char full_name[128];
     if (strchr(name, '.')) // wrong name
@@ -80,7 +80,7 @@ int create_repo(char *name)
     return 0;
 }
 
-int change_repo(char *name)
+int change_repo(const char *name)
 {
     if (strchr(name, '.'))
         return -1;
@@ -124,8 +124,6 @@ int change_repo(char *name)
         return -4;
     }
 
-    int n = json_integer_value(id);
-
     json_t *repo_name = json_object_get(repo_info, "repo_name");
 
     if (!json_is_string(repo_name))
@@ -159,12 +157,17 @@ int change_repo(char *name)
 
     messageID = json_integer_value(id);
 
-    // json_decref(id);
-    // json_decref(repo_name);
-    // json_decref(old_repo_info);
-    // json_decref(old_data_array);
-    // json_decref(old_base);
     return 0;
+}
+
+int delete_repo(const char *name)
+{
+    char full_path[128];
+    snprintf(full_path, 128, "%s/%s.json", STORAGE_FOLDER, name);
+
+    int ret = remove(full_path);
+
+    return ret;
 }
 
 int create_object(json_t *message)
@@ -261,17 +264,6 @@ int read_object(int search_ID, char *buffer, size_t buffer_size)
 
     if (search_ID > messageID || search_ID < 0)
         return -3;
-
-    if (search_ID == 0)
-    {
-        char *object_in_text = json_dumps(data_array, JSON_COMPACT);
-        if (!object_in_text)
-            return -1;
-        strncpy(buffer, object_in_text, buffer_size - 1);
-        int len = strlen(object_in_text);
-        free(object_in_text);
-        return (len < buffer_size ? len : buffer_size);
-    }
 
     if (!json_is_array(data_array))
         return -1;

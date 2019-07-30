@@ -41,7 +41,7 @@ int proc_response(char *buffer)
         for (size_t i = array_size - last_recieved; i < array_size; i++)
         {
             json_t *value = json_array_get(out_array, i);
-            char *ptr = json_dumps(value, JSON_COMPACT);
+            char *ptr = json_dumps(value, JSON_INDENT(1));
             printf("%s\n", ptr);
             free(ptr);
         }

@@ -32,7 +32,7 @@ You can create your own templates. To do this follow instructions:
 execute this: create_template FILE_WITH_TEMLPATE TEMPLATE_NAME
 FILE_WITH_TEMLPATE must be json file with object of strict format (you must specify data format - ""(string) or 0(number)):
 {
-	"command" : "create",
+	"command" : cmd,
 	"params":
 	{
 		"smth" : "",
@@ -40,8 +40,8 @@ FILE_WITH_TEMLPATE must be json file with object of strict format (you must spec
 		...
 	}
 }
-
-To use temlpate, execute this: "create_(TEMPLATE_NAME) [arguments]" (strings must be in commas)
+cmd can be "create", "create_repo", "update"
+To use temlpate, execute this: "use_(TEMPLATE_NAME) [arguments]" (strings must be in commas)
 
 Also you can create repositories.
 Execute command below:

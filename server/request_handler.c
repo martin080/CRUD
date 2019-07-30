@@ -110,6 +110,27 @@ int handle_read(json_t *params, json_t *response)
         }
 
         int ID = json_integer_value(value);
+
+        if (ID == 0)
+        {
+            char id_field[32];
+            json_t *value0;
+            size_t j;
+            json_array_foreach(data_array, j, value0)
+            {
+                json_t *id = json_object_get(value0, "messageID");
+                int cur_id = json_integer_value(id);
+
+                snprintf(id_field, 32, "ID%d", cur_id);
+
+                char *ptr = json_dumps(value0, JSON_COMPACT);
+                json_object_set_new(success, id_field, json_string(ptr));
+                free(ptr);
+            }
+
+            break;
+        }
+
         ssize_t size = read_object(ID, buffer, BUFFER_SIZE - 1);
         if (size < 0)
         {
@@ -254,7 +275,7 @@ int handle_create_repo(json_t *request, json_t *response)
         return -1;
     }
 
-    char *name = json_string_value(repo_name);
+    const char *name = json_string_value(repo_name);
 
     int ret = create_repo(name);
     char message[128];
@@ -269,6 +290,38 @@ int handle_create_repo(json_t *request, json_t *response)
         snprintf(message, 128, "repo \"%s\" was created successfully", name);
         pack_response(response, 0, message);
     }
+}
+
+int handle_delete_repo(json_t *request, json_t *response)
+{
+    if (!json_is_object(request))
+    {
+        pack_response(response, -1, "wrong field \"params\"");
+        return -1;
+    }
+    json_t *repo_name = json_object_get(request, "name");
+
+    if (!json_is_string(repo_name))
+    {
+        pack_response(response, -1, "missing field \"name\"");
+        return -1;
+    }
+
+    const char *name = json_string_value(repo_name);
+    int ret = delete_repo(name);
+
+    char message[128];
+    if (ret == -1)
+    {
+        snprintf(message, 128, "repo \"%s\" doesn't exist", name);
+        pack_response(response, -1, message);
+        return -1;
+    }
+
+    snprintf(message, 128, "repo \"%s\" was deleted successfully", name);
+    pack_response(response, 0, message);
+
+    return 0;
 }
 
 int handle_request(char *request, char *buffer, size_t buffer_size)
@@ -294,12 +347,13 @@ int handle_request(char *request, char *buffer, size_t buffer_size)
     const char *repo_name;
     if (repo != NULL)
     {
-        if (json_is_string(repo)) // meh :(
+        printf("  changing repo: ");
+        if (json_is_string(repo)) 
         {
             repo_name = json_string_value(repo);
             int ret = change_repo(repo_name);
 
-            if (ret < 0) // swithing repos failed
+            if (ret < 0) // switching repos is failed
             {
                 status = -1;
                 json_t *result = json_object();
@@ -307,7 +361,7 @@ int handle_request(char *request, char *buffer, size_t buffer_size)
                 switch (ret)
                 {
                 case -1:
-                    fprintf(stderr, "FAIL (worng name format)\n");
+                    fprintf(stderr, "FAIL (wrong name format)\n");
                     snprintf(message, 128, "wrong name format: \"%s\"", repo_name);
                     break;
                 case -2:
@@ -337,12 +391,14 @@ int handle_request(char *request, char *buffer, size_t buffer_size)
             snprintf(buffer, buffer_size, "%s\n\n", response_in_text);
             free(response_in_text);
             json_decref(response_object);
+            return -1;
         }
-    } else if (!is_repo_default)
+
+        printf("SUCCESS\n");
+    }
+    else if (!is_repo_default)
     {
-        char path[128];
-        snprintf(path, 128, "%s/%s", STORAGE_FOLDER, STD_BASENAME_WITHOUT_EXTENTION);
-        change_repo(path);
+        change_repo(STD_BASENAME_WITHOUT_EXTENTION);
     }
 
     json_t *command = json_object_get(object, "command");
@@ -359,6 +415,8 @@ int handle_request(char *request, char *buffer, size_t buffer_size)
         status = handle_delete(params, response_object);
     else if (!strcmp(command_text, "create_repo"))
         status = handle_create_repo(params, response_object);
+    else if (!strcmp(command_text, "delete_repo"))
+        status = handle_delete_repo(params, response_object);
     else
         pack_response(response_object, -1, "wrong command");
 

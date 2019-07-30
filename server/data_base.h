@@ -20,9 +20,11 @@ int init_database();
 
 int dump_database();
 
-int create_repo(char *name);
+int create_repo(const char *name);
 
-int change_repo(char *name);
+int delete_repo(const char *name);
+
+int change_repo(const char *name);
 
 int create_object(json_t *object);
 
