@@ -1,21 +1,5 @@
 #include "request_handler.h"
 
-int load_id(int ID)
-{
-    FILE *id_file = fopen("ID", "r+");
-    if (!id_file)
-    {
-        fprintf(stderr, "ID file open failed\n");
-        return -1;
-    }
-
-    int ret = fprintf(id_file, "%d", ID);
-
-    fclose(id_file);
-
-    return ret;
-}
-
 int pack_status(json_t *response, int status)
 {
     if (!json_is_object(response))
@@ -35,6 +19,15 @@ int pack_message(json_t *response, char *message)
         return -1;
 
     return json_object_set_new(response, "message", json_string(message));
+}
+
+int pack_response(json_t *response, int status, char *message)
+{
+    pack_status(response, status);
+    json_t *result = json_object();
+    pack_message(result, message);
+    json_object_set(response, "result", result);
+    return 0;
 }
 
 int pack_refuse(char *buffer, size_t buffer_size)
@@ -66,11 +59,10 @@ int handle_create(json_t *request, json_t *response)
     }
     else
     {
-        snprintf(response_text, 128, "data was loaded successfuly, new messageID is %d", messageID);
+        snprintf(response_text, 128, "data was loaded successfuly, new messageID is %d", messageID - 1);
         pack_status(response, 0);
         pack_message(result, response_text);
         json_object_set(response, "result", result);
-        load_id(++messageID);
     }
     return 0;
 }
@@ -118,6 +110,27 @@ int handle_read(json_t *params, json_t *response)
         }
 
         int ID = json_integer_value(value);
+
+        if (ID == 0)
+        {
+            char id_field[32];
+            json_t *value0;
+            size_t j;
+            json_array_foreach(data_array, j, value0)
+            {
+                json_t *id = json_object_get(value0, "messageID");
+                int cur_id = json_integer_value(id);
+
+                snprintf(id_field, 32, "ID%d", cur_id);
+
+                char *ptr = json_dumps(value0, JSON_COMPACT);
+                json_object_set_new(success, id_field, json_string(ptr));
+                free(ptr);
+            }
+
+            break;
+        }
+
         ssize_t size = read_object(ID, buffer, BUFFER_SIZE - 1);
         if (size < 0)
         {
@@ -246,6 +259,71 @@ int handle_delete(json_t *request, json_t *response)
     return 0;
 }
 
+int handle_create_repo(json_t *request, json_t *response)
+{
+    if (!json_is_object(request))
+    {
+        pack_response(response, -1, "wrong request");
+        return -1;
+    }
+
+    json_t *repo_name = json_object_get(request, "name");
+
+    if (!json_is_string(repo_name))
+    {
+        pack_response(response, -1, "you must specify name of repo in \"params\"");
+        return -1;
+    }
+
+    const char *name = json_string_value(repo_name);
+
+    int ret = create_repo(name);
+    char message[128];
+    switch (ret)
+    {
+    case -1:
+        pack_response(response, -1, "name can't contain dots");
+        break;
+    case -2:
+        pack_response(response, -1, "name is already taken");
+    case 0:
+        snprintf(message, 128, "repo \"%s\" was created successfully", name);
+        pack_response(response, 0, message);
+    }
+}
+
+int handle_delete_repo(json_t *request, json_t *response)
+{
+    if (!json_is_object(request))
+    {
+        pack_response(response, -1, "wrong field \"params\"");
+        return -1;
+    }
+    json_t *repo_name = json_object_get(request, "name");
+
+    if (!json_is_string(repo_name))
+    {
+        pack_response(response, -1, "missing field \"name\"");
+        return -1;
+    }
+
+    const char *name = json_string_value(repo_name);
+    int ret = delete_repo(name);
+
+    char message[128];
+    if (ret == -1)
+    {
+        snprintf(message, 128, "repo \"%s\" doesn't exist", name);
+        pack_response(response, -1, message);
+        return -1;
+    }
+
+    snprintf(message, 128, "repo \"%s\" was deleted successfully", name);
+    pack_response(response, 0, message);
+
+    return 0;
+}
+
 int handle_request(char *request, char *buffer, size_t buffer_size)
 {
     json_t *response_object = json_object();
@@ -263,10 +341,69 @@ int handle_request(char *request, char *buffer, size_t buffer_size)
         return -1;
     }
 
+    json_t *repo = json_object_get(object, "repo");
+
+    int status;
+    const char *repo_name;
+    if (repo != NULL)
+    {
+        printf("  changing repo: ");
+        if (json_is_string(repo)) 
+        {
+            repo_name = json_string_value(repo);
+            int ret = change_repo(repo_name);
+
+            if (ret < 0) // switching repos is failed
+            {
+                status = -1;
+                json_t *result = json_object();
+                char message[128];
+                switch (ret)
+                {
+                case -1:
+                    fprintf(stderr, "FAIL (wrong name format)\n");
+                    snprintf(message, 128, "wrong name format: \"%s\"", repo_name);
+                    break;
+                case -2:
+                    fprintf(stderr, "FAIL (repo doesn't exist)\n");
+                    snprintf(message, 128, "repo \"%s\" doesn't exist", repo_name);
+                    break;
+                case -3:
+                    fprintf(stderr, "FAIL (load repo failed)\n");
+                    snprintf(message, 128, "load repo \"%s\" failed", repo_name);
+                    break;
+                }
+
+                pack_response(response_object, status, message);
+
+                char *response_in_text = json_dumps(response_object, JSON_COMPACT);
+                snprintf(buffer, buffer_size, "%s\n\n", response_in_text);
+                free(response_in_text);
+                json_decref(response_object);
+
+                return status;
+            }
+        }
+        else
+        {
+            pack_response(response_object, -1, "wrong format of repo name");
+            char *response_in_text = json_dumps(response_object, JSON_COMPACT);
+            snprintf(buffer, buffer_size, "%s\n\n", response_in_text);
+            free(response_in_text);
+            json_decref(response_object);
+            return -1;
+        }
+
+        printf("SUCCESS\n");
+    }
+    else if (!is_repo_default)
+    {
+        change_repo(STD_BASENAME_WITHOUT_EXTENTION);
+    }
+
     json_t *command = json_object_get(object, "command");
     json_t *params = json_object_get(object, "params");
     const char *command_text = json_string_value(command);
-    int status;
 
     if (!strcmp(command_text, "create")) // command == create
         status = handle_create(params, response_object);
@@ -276,6 +413,12 @@ int handle_request(char *request, char *buffer, size_t buffer_size)
         status = handle_update(params, response_object);
     else if (!strcmp(command_text, "delete")) // command == delete
         status = handle_delete(params, response_object);
+    else if (!strcmp(command_text, "create_repo"))
+        status = handle_create_repo(params, response_object);
+    else if (!strcmp(command_text, "delete_repo"))
+        status = handle_delete_repo(params, response_object);
+    else
+        pack_response(response_object, -1, "wrong command");
 
     json_decref(command);
     json_decref(params);
@@ -285,10 +428,7 @@ int handle_request(char *request, char *buffer, size_t buffer_size)
     {
         json_decref(response_object);
         response_object = json_object();
-        pack_status(response_object, -1);
-        json_t *result = json_object();
-        pack_message(result, "failed dump json data\n");
-        json_object_set(response_object, "result", result);
+        pack_response(response_object, -1, "failed dump json data");
         response_in_text = json_dumps(response_object, JSON_COMPACT);
     }
     snprintf(buffer, buffer_size, "%s\n\n", response_in_text);

@@ -79,10 +79,15 @@ int main(int argc, char *argv[])
     if (sockfd < 0)
         return 1;
 
-    int ret = init_processor(); // response processor initialization
+    int ret = response_processor_init(); // response processor initialization
 
     if (ret < 0)
         return 2;
+
+    ret = command_processor_init();
+
+    if (ret < 0)
+        return 3;
 
     struct pollfd pfd[2];
     pfd[0].fd = 0;
@@ -112,14 +117,14 @@ int main(int argc, char *argv[])
                 return -1;
         }
 
-        if (pfd[1].revents & POLLHUP)
+        if (pfd[1].revents & POLLHUP) // shut connection
         {
             printf(">connection lost\n");
             close(sockfd);
             return 6;
         }
 
-        if (pfd[1].revents & POLLIN)
+        if (pfd[1].revents & POLLIN) // server sent data
         {
             pfd[1].revents = 0;
 

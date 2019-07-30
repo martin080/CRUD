@@ -1,0 +1,75 @@
+Requset unit format: 
+{
+	"command" : cmd,
+	"params":
+	{
+		////
+	}
+}
+
+Where cmd = "create" | "read" | "update" | "delete". 
+
+for read/delete/update field "messageID" is neccessary.
+
+"send FILENAME" - to send instruction file(FILENAME). FILENAME must be json
+array with elements of strict format described above.
+
+"changeout FILENAME" - to change output path (FILENAME == "stdout" - change to 
+standart output).
+
+"dump FILENAME" - dump last responses to file FILENAME (or extern if in FILENAMEjson array).
+
+"exit" - to exit from app.
+
+To read/delete several units of data, specify its messageID in array like that: 
+"messageID":[12,113,34]
+To read all data you must specify messageID equal to 0.
+
+Also interactive method is available.
+Print "read/delete ID1 ID2 ..." to do corresponding operation
+
+You can create your own templates. To do this follow instructions:
+execute this: create_template FILE_WITH_TEMLPATE TEMPLATE_NAME
+FILE_WITH_TEMLPATE must be json file with object of strict format (you must specify data format - ""(string) or 0(number)):
+{
+	"command" : cmd,
+	"params":
+	{
+		"smth" : "",
+		"smth2" : 0,
+		...
+	}
+}
+cmd can be "create", "create_repo", "update"
+To use temlpate, execute this: "use_(TEMPLATE_NAME) [arguments]" (strings must be in commas)
+
+Also you can create repositories.
+Execute command below:
+{
+	"command" : "create_repo",
+	"params":
+	{
+		"name" : NAME_OF_REPO
+	}
+}
+or you can create template like below and create repositories from terminal
+{
+	"command" : "create_repo",
+	"params":
+	{
+		"name" : ""
+	}
+}
+
+To read message from respository REPO_NAME execute this command:
+read --repo REPO_NAME ID1 ID2 ...
+or send this:
+{
+	"command" : "read",
+	"repo" : REPO_NAME,
+	"params":
+	{
+		"messageID" : [ID1, ID2, ..]
+	}
+}
+(as you see, you can specify repo's in requests)

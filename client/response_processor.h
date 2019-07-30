@@ -5,12 +5,8 @@
 #include <string.h>
 #include <sys/stat.h>
 
-int out_fd;
-int last_recieved;
-json_t *out_array;
+#include "shared.h"
 
-int init_processor();
-
-int changeoutf(char *file_path);
+int response_processor_init();
 
 int proc_response(char *buffer);

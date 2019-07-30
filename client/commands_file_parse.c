@@ -1,12 +1,11 @@
 #include "commands_file_parse.h"
 #include "getmac.h"
 
-int check(json_t *commands, struct errors_t *errors)
+int check_commands(json_t *commands)
 {
     if (!json_is_array(commands))
     {
-        errors->is_errors = 1;
-        errors->is_not_array = 1;
+        fprintf(stderr, ">file with commands must be array\n");
         return -1;
     }
 
@@ -17,50 +16,41 @@ int check(json_t *commands, struct errors_t *errors)
     {
         if (!json_is_object(value))
         {
-            errors->command_index = index;
-            errors->is_errors = 1;
-            errors->is_not_object = 1;
+            fprintf(stderr, ">command %ld is not object\n", index + 1);
             return -1;
         }
 
         json_t *command = json_object_get(value, "command");
         if (!command)
         {
-            errors->is_errors = 1;
-            errors->command_index = index;
-            errors->there_is_no_command = 1;
+            fprintf(stderr, ">field \"command\" is required (%ld)\n", index + 1);
             return -1;
         }
 
         if (!json_is_string(command))
         {
-            errors->is_errors = 1;
-            errors->command_index = index;
-            errors->command_is_not_string = 1;
+            fprintf(stderr, ">field \"command\" must be a string (%ld)\n",index);
             return -1;
         }
 
         json_t *params = json_object_get(value, "params");
         if (!params)
         {
-            errors->is_errors = 1;
-            errors->command_index = index;
-            errors->there_is_no_params = 1;
+            fprintf(stderr, ">field \"params\" is required\n (%ld)", index + 1);
             return -1;
         }
 
         if (!json_is_object(params))
         {
-            errors->is_errors = 1;
-            errors->command_index = index;
-            errors->is_not_object = 1;
+            fprintf(stderr, ">value of field \"params\" must be object (%ld)\n", index + 1);
             return -1;
         }
         const char *command_value = json_string_value(command);
-        
+
         if (!strcmp(command_value, "read") || !strcmp(command_value, "delete"))
         {
             json_t *messageID = json_object_get(params, "messageID");
+
             if (json_is_array(messageID))
             {
                 json_t *val;
@@ -69,9 +59,7 @@ int check(json_t *commands, struct errors_t *errors)
                 {
                     if (!json_is_integer(val))
                     {
-                        errors->is_errors = 1;
-                        errors->messageid_is_not_integer = 1;
-                        errors->command_index = index;
+                        fprintf(stderr, ">values of array of fielf \"messageID\" must be integers (%ld)\n", index + 1);
                         return -1;
                     }
                 }
@@ -83,11 +71,14 @@ int check(json_t *commands, struct errors_t *errors)
                 json_t *newMessageID = json_object_get(params, "messageID");
                 json_array_append_new(newMessageID, json_integer(ID));
             }
-            else 
+            else if (messageID == NULL)
             {
-                errors->is_errors = 1;
-                errors->command_index = index;
-                errors->messageid_is_not_integer = 1;
+                fprintf(stderr, ">field \"messageID\" is required (%ld)\n", index + 1);
+                return -1;
+            }
+            else
+            {
+                fprintf(stderr, ">value of field \"messageID\" can be integer or array of integers (%ld)\n", index + 1);
                 return -1;
             }
         }
@@ -96,9 +87,7 @@ int check(json_t *commands, struct errors_t *errors)
             json_t *messageID = json_object_get(params, "messageID");
             if (!json_is_integer(messageID))
             {
-                errors->is_errors = 1;
-                errors->command_index = index;
-                errors->messageid_is_not_integer = 1;
+               fprintf(stderr, ">value of field \"messageID\" must be integer (%ld)\n", index + 1);
                 return -1;
             }
         }
@@ -108,71 +97,68 @@ int check(json_t *commands, struct errors_t *errors)
             mac_eth0(mac);
             json_object_set_new(params, "deviceID", json_string(mac));
         }
+        else if (!strcmp(command_value, "create_repo") || !strcmp(command_value, "delete_repo"))
+        {
+            json_t *name = json_object_get(params, "name");
+
+            if (!name)
+            {
+                fprintf(stderr, ">field \"name\" is required (%ld)\n", index + 1);
+                return -1;
+            }
+
+            if (!json_is_string(name))
+            {
+                fprintf(stderr, ">field \"name\" must be a string (%ld)\n", index + 1);
+                return -1;
+            }
+        }
         else
         {
-            errors->is_errors = 1;
-            errors->command_index = index;
-            errors->wrong_command = 1;
+            fprintf(stderr, ">wrong command (%ld)\n", index + 1);
             return -1;
         }
     }
-
-    errors->is_errors = 0;
     return 0;
 }
 
-void printf_error(struct errors_t *errors)
+int check_template(json_t *template)
 {
-    if (!errors->is_errors)
+    if (!json_is_object(template))
     {
-        printf("ok\n");
-        return;
-    }
-    else if (errors->is_not_array)
-    {
-        fprintf(stderr, "commands are not in the array\n");
-        return;
-    }
-    else if (errors->is_not_object)
-    {
-        fprintf(stderr, "command %d is not object\n", errors->command_index + 1);
-        return;
-    }
-    else if (errors->command_is_not_string)
-    {
-        fprintf(stderr, "field \"command\" in command %d is not a string\n", errors->command_index + 1);
-        return;
-    }
-    else if (errors->there_is_no_params)
-    {
-        fprintf(stderr, "in command %d there is no field \"params\"\n", errors->command_index + 1);
-        return;
-    }
-    else if (errors->is_not_object)
-    {
-        fprintf(stderr, "field \"params\" in command %d is not an object\n", errors->command_index + 1);
-        return;
-    }
-    else if (errors->there_is_no_deviceid)
-    {
-        fprintf(stderr, "there is no deviceID in command %d\n", errors->command_index + 1);
-        return;
-    }
-    else if (errors->messageid_is_not_integer)
-    {
-        fprintf(stderr, "in command %d messageID aren't integers\n", errors->command_index + 1);
-        return;
-    }
-    else if (errors->wrong_command)
-    {
-        fprintf(stderr, "wrong field \"command\" in command %d\n", errors->command_index + 1);
-        return;
-    }
-    else if (errors->deviceid_is_not_a_string)
-    {
-        fprintf(stderr, "deviceID in command %d is not a string\n", errors->command_index + 1);
-        return;
+        fprintf(stderr, ">template must be an object\n");
+        return -1;
     }
 
-    fprintf(stderr, "undefined error in command %d\n", errors->command_index + 1);
+    json_t *command = json_object_get(template, "command");
+
+    if (!command)
+    {
+        fprintf(stderr, ">field \"command\" is required\n");
+        return -1;
+    }
+
+    if (!json_is_string(command))
+    {
+        fprintf(stderr, ">field \"command\" must be a string\n");
+        return -1;
+    }
+
+    const char *content = json_string_value(command);
+    if (strcmp(content, "create") && strcmp(content, "create_repo") && strcmp(content, "update"))
+    {
+        fprintf(stderr, ">field \"command\" in template can be only \"create\", \"create_repo\", \"update\"\n");
+        return -1;
+    }
+
+    json_t *params = json_object_get(template, "params");
+
+    if (!json_is_object(params))
+    {
+        fprintf(stderr, ">value of field \"params\" must be an object");
+        return -1;
+    }
+
+    return 0;
 }
+

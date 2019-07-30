@@ -20,4 +20,6 @@ int handle_update( json_t *request, json_t *response);
 
 int handle_delete(json_t *request, json_t *response);
 
+int handle_create_repo(json_t *request, json_t *response);
+
 int handle_request(char *request, char *buffer, size_t buffer_size);
