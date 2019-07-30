@@ -61,6 +61,8 @@ or you can create template like below and create repositories from terminal
 	}
 }
 
+command "delete_repo NAME" (delete the respository) is available too
+
 To read message from respository REPO_NAME execute this command:
 read --repo REPO_NAME ID1 ID2 ...
 or send this:
