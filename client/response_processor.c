@@ -49,7 +49,12 @@ int proc_response(char *buffer)
     else
     {
         lseek(out_fd, 0, SEEK_SET);
-        json_dumpfd(out_array, out_fd, 0);
+        int ret = json_dumpfd(out_array, out_fd, 0);
+        if (ret == -1)
+        {
+            fprintf(stderr, ">load datat failed\n");
+            return -1;
+        }
     }
 
     return 0;

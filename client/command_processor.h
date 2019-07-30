@@ -5,8 +5,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-
-
 int command_processor_init();
 
 int send_command(int sockfd, json_t *);

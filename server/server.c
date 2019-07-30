@@ -86,6 +86,8 @@ int main()
         fprintf(stderr, "ID initialization failed\n");
         return 2;
     }
+    else if (init_res < 0)
+        fprintf(stderr, "undefined error with load database\n" );
     else
         printf("  data base initialization success\n");
 

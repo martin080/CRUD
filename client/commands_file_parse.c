@@ -108,6 +108,10 @@ int check_commands(json_t *commands, struct errors_t *errors)
             mac_eth0(mac);
             json_object_set_new(params, "deviceID", json_string(mac));
         }
+        else if (!strcmp(command_value, "create_repo"))
+        {
+            char c;
+        }
         else
         {
             errors->is_errors = 1;
@@ -133,16 +137,9 @@ int check_template_object(json_t *obj)
             continue;
         }
 
-        if (!json_is_string(value))
+        if (!json_is_string(value) && !json_is_integer(value))
         {
             return -1;
-        }
-
-        const char *value_ptr = json_string_value(value);
-
-        if (!strcmp(value_ptr, "string") || !strcmp(value_ptr, "number"))
-        {
-            return -2;
         }
     }
 
@@ -174,12 +171,13 @@ int check_template(json_t *template, struct errors_t *err)
         return -1;
     }
 
-    if (strcmp(json_string_value(command), "create"))
-    {
-        err->is_errors = 1;
-        err->wrong_command = 1;
-        return -1;
-    }
+    // const char *content = json_string_value(command);
+    // if (strcmp(content, "create") || strcmp(content, "create_repo"))
+    // {
+    //     err->is_errors = 1;
+    //     err->wrong_command = 1;
+    //     return -1;
+    // }
 
     json_t *params = json_object_get(template, "params");
 
@@ -190,14 +188,14 @@ int check_template(json_t *template, struct errors_t *err)
         return -1;
     }
 
-    if (json_object_size(template) > 2)
+    if (json_object_size(template) > 3)
     {
         err->is_errors = 1;
         err->unnecessary_parameters = 1;
         return -1;
     }
 
-    if (!check_template_object(params))
+    if (check_template_object(params) < 0)
     {
         err->is_errors = 1;
         err->wrong_parameters = 1;

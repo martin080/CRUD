@@ -1,5 +1,67 @@
 #include "command_processor.h"
 
+char *str_tok(char *buffer)
+{
+
+    static int size = 0;
+    static char *ptr = NULL;
+    static char *buf;
+
+    if (buffer == NULL)
+    {
+        if (ptr == NULL)
+            return NULL;
+        while (*ptr != '\0')
+        {
+            if (ptr >= buf + size)
+                return NULL;
+            ptr++;
+        }
+
+        while (*ptr == '\0')
+        {
+            if (ptr > buf + size)
+                return NULL;
+            ptr++;
+        }
+
+        if (ptr - buf > size)
+            return NULL;
+
+        return ptr;
+    }
+
+    size = strlen(buffer);
+    buf = buffer;
+    int i = 0;
+    for (; i < size; i++)
+    {
+        buffer[i] = (buffer[i] == ' ' || buffer[i] == '\t' || buffer[i] == '\n' ? '\0' : buffer[i]);
+
+        if (buffer[i] == '"')
+        {
+            buffer[i] = '\0';
+            i++;
+            while (buffer[i] != '"')
+                if (buffer[i++] == '\0')
+                {
+                    return NULL;
+                }
+            buffer[i] = '\0';
+        }
+    }
+
+    ptr = buffer;
+    while (*ptr == '\0')
+    {
+        if (ptr >= buffer + size)
+            return NULL;
+        ptr++;
+    }
+
+    return ptr;
+}
+
 int command_processor_init()
 {
     static int calls = 0;
@@ -106,16 +168,21 @@ int changeoutf(char *file_path)
         }
 
         if (fd == -1)
+        {
+            fprintf(stderr, ">changing out path failed\n");
             return -1;
-        printf(">out path was changed successully\n");
+        }
 
         int flags = fcntl(fd, F_GETFL, 0);
         fcntl(fd, F_SETFL, flags | O_NONBLOCK);
     }
 
+    printf(">out path was changed successully\n");
+
     if (out_fd != 0)
         close(out_fd);
     out_fd = fd;
+    return 0;
 }
 
 int dump(char *path)
@@ -136,7 +203,34 @@ int dump(char *path)
     return ret;
 }
 
-int pack_read_delete(json_t *command, char *buffer, char *command_string)
+int handle_option(json_t *obj, char *token)
+{
+    if (!json_is_object(obj))
+        return -1;
+
+    if (token == NULL)
+        return -1;
+
+    if (!strcmp(token, "--repo"))
+    {
+        token = str_tok(NULL);
+        if (token == NULL)
+            return -1;
+
+        if (strchr(token, '.'))
+            return -1;
+
+        json_object_set_new(obj, "repo", json_string(token));
+    }
+    else
+    {
+        return -1;
+    }
+
+    return 0;
+}
+
+int pack_read_delete(json_t *command, char *token, char *command_string)
 {
     if (!json_is_object(command))
         return -1;
@@ -146,25 +240,30 @@ int pack_read_delete(json_t *command, char *buffer, char *command_string)
     json_t *params = json_object();
     json_t *messageIDs = json_array();
 
-    int len = strlen(buffer);
-    char *cur_num = buffer;
-
-    while (cur_num)
+    while (token)
     {
-        int n = atoi(cur_num);
-
-        if (n == 0 && *cur_num != 0)
+        if (it_is_option(token))
         {
-            fprintf(stderr, ">wrong input\n");
+            if (handle_option(command, token) < 0)
+                return -1;
+            ;
+            token = str_tok(NULL);
+        }
+
+        if (token == NULL)
+            break;
+
+        int n = atoi(token);
+
+        if (n == 0 && *token != 0)
+        {
+            fprintf(stderr, ">wrong input: \"%s\"\n", token);
             return -2;
         }
 
         json_array_append_new(messageIDs, json_integer(n));
 
-        cur_num = strchr(cur_num, ' ');
-
-        if (cur_num)
-            cur_num++;
+        token = str_tok(NULL);
     }
 
     json_object_set(params, "messageID", messageIDs);
@@ -226,65 +325,52 @@ int create_template(char *path, char *name)
     return json_dump_file(templates, TEMPLATES_PATH, 0);
 }
 
-int template_fill_object(json_t *obj, char **arguments)
+int template_fill_object(json_t *obj, char *arguments) // in process
 {
     if (!json_is_object(obj))
         return -5;
 
-    char *ptr = *arguments;
+    if (arguments == NULL)
+        return -1;
 
-    while ((*ptr == ' ' || *ptr == '\t') && *ptr != '\0')
-        ptr++;
+    char *ptr = arguments;
+
+    if (ptr == NULL)
+        return -1;
 
     json_t *value;
     const char *key;
     json_object_foreach(obj, key, value)
     {
+        if (ptr == NULL)
+            return -1;
+
         if (json_is_object(value))
         {
-            if (template_fill_object(value, &ptr) < 0)
+            if (template_fill_object(value, ptr) < 0)
                 return -1;
             continue;
         }
 
-        if (!json_is_string(value))
+        if (!json_is_string(value) && !json_is_integer(value))
             return -1;
 
         const char *content = json_string_value(value);
 
-        if (!strcmp(content, "string"))
+        if (json_is_string(value))
         {
-            char *string_start, *string_end;
-            string_start = strchr(ptr, '"');
-
-            if (!string_start)
-                return -2;
-
-            string_end = strchr(string_start + 1, '"');
-
-            if (!string_end)
-                return -2;
-
-            *string_end = '\0';
-
-            json_string_set(value, string_start + 1);
-
-            ptr = string_end + 1;
-            *arguments = ptr;
+            json_string_set(value, ptr);
+            ptr = str_tok(NULL);
         }
-        else if (!strcmp(content, "number"))
+        else if (json_is_integer(value))
         {
             int num = atoi(ptr); // пока что только int
 
             if (num == 0 && *ptr != '0')
                 return -3;
 
-            json_t *number_value = json_integer(num);
-            json_decref(value);
-            value = number_value;
-
-            ptr = strchr(ptr + 1, ' ');
-            *arguments = ptr;
+            json_integer_set(value, num);
+            ptr = str_tok(NULL);
         }
         else
         {
@@ -295,9 +381,17 @@ int template_fill_object(json_t *obj, char **arguments)
     return 0;
 }
 
-int template_fill(json_t *obj, char *name, char **argumets)
+int template_fill(json_t **obj, char *name, char *argumets) // in process
 {
-    obj = NULL;
+    argumets = str_tok(argumets);
+
+    if (argumets == NULL)
+    {
+        fprintf(stderr, "tokenization failed\n");
+        return -1;
+    }
+
+    *obj = NULL;
     json_t *value;
     size_t index;
     json_array_foreach(templates, index, value)
@@ -310,17 +404,30 @@ int template_fill(json_t *obj, char *name, char **argumets)
 
         if (!strcmp(t_ptr, name))
         {
-            obj = json_object_get(value, "template");
-            if (obj == NULL)
+            *obj = json_object_get(value, "template");
+            if (*obj == NULL)
                 return -1;
             break;
         }
     }
 
-    if (obj == NULL)
+    if (*obj == NULL)
+    {
+        printf(">template with name \"%s\" not found", name);
         return -1;
+    }
 
-    json_t *params = json_object_get(obj, "params");
+    if (it_is_option(argumets))
+    {
+        if (handle_option(*obj, argumets) < 0)
+        {
+            fprintf(stderr, ">handle option failed\n");
+            return -1;
+        }
+        argumets = str_tok(NULL);
+    }
+
+    json_t *params = json_object_get(*obj, "params");
 
     int ret = template_fill_object(params, argumets);
 
@@ -361,10 +468,10 @@ int process_command(int sockfd)
     else if (!strcmp(buf_command, "read") || !strcmp(buf_command, "delete"))
     {
         fgets(buf_argument, 128, stdin);
+        fflush(stdin);
         char *ptr = buf_argument;
 
-        while ((*ptr == ' ' || *ptr == '\t') && *ptr != '\0')
-            ptr++;
+        ptr = str_tok(ptr);
 
         json_t *cmd = json_object();
         int ret = pack_read_delete(cmd, ptr, buf_command);
@@ -396,19 +503,23 @@ int process_command(int sockfd)
         char name[32];
         sscanf(buf_command, "create_%s", name);
         fgets(buf_argument, 127, stdin);
+        fflush(stdin);
 
         char *ptr = buf_argument;
+
         json_t *request;
 
-        if (template_fill(request, name, &ptr) < 0)
+        if (template_fill(&request, name, ptr) < 0)
         {
             fprintf(stderr, ">fill of template failed\n");
+            command_processor_init();
             return -1;
         }
 
         if (send_command(sockfd, request) < 0)
         {
             fprintf(stderr, ">send failed\n");
+            command_processor_init();
             return -1;
         }
 

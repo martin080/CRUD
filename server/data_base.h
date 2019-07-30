@@ -1,14 +1,28 @@
 #include <jansson.h>
-#include <time.h>
 #include <string.h>
+#include <time.h>
+#include <sys/types.h> // open() \/
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h> // write()
 
-#define BASE_PATH "data.json"
-#define ID_PATH "ID"
+#define BASE_PATH "storage/data.json"
+#define STORAGE_FOLDER "storage"
+#define STD_BASENAME_WITHOUT_EXTENTION "data"
 
+json_t *database;
 json_t *data_array;
+json_t *repo_info;
 int messageID;
+short int is_repo_default;
 
 int init_database();
+
+int dump_database();
+
+int create_repo(char *name);
+
+int change_repo(char *name);
 
 int create_object(json_t *object);
 
